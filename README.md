@@ -18,14 +18,12 @@ Aplikasi ini **100% SIAP DIDEPLOY KE VERCEL** dengan arsitektur zero-config:
 ## Cara Deploy ke Vercel (Langkah Cepat)
 
 ### Opsi 1: Lewat Dashboard Vercel (Rekomendasi)
-1. Buat repositori baru di GitHub (misal: `dompetku-app`).
-2. Hubungkan dan push folder proyek ini ke GitHub:
+1. Hubungkan repositori GitHub (`https://github.com/FuzeHere/Finance-Note`).
+2. Pastikan kode sudah ter-push ke GitHub:
    ```bash
    git add .
-   git commit -m "feat: DompetKu personal finance mobile app"
-   git branch -M main
-   git remote add origin https://github.com/USERNAME/dompetku-app.git
-   git push -u origin main
+   git commit -m "feat: Finance Note personal finance app"
+   git push
    ```
 3. Buka [vercel.com](https://vercel.com) dan klik **Add New... -> Project**.
 4. Pilih repositori GitHub Anda dan klik **Deploy**.
