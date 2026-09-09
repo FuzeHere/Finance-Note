@@ -1,10 +1,10 @@
-# DompetKu — Personal Finance Mobile App (Receipt Edition) 🧾📱
+# DompetKu — Personal Finance Mobile App (Receipt Edition)
 
 Aplikasi pencatat keuangan pribadi mobile-first yang super cepat dengan laporan keuangan otomatis bergaya **struk belanja digital (*digital thermal receipt*)** yang elegan, ringkas, dan siap dibagikan.
 
 ---
 
-## 🚀 Status Kesiapan Vercel
+## Status Kesiapan Vercel
 
 Aplikasi ini **100% SIAP DIDEPLOY KE VERCEL** dengan arsitektur zero-config:
 - **Build Status**: `Compiled successfully` (`next build` lulus 100% tanpa error).
@@ -15,7 +15,7 @@ Aplikasi ini **100% SIAP DIDEPLOY KE VERCEL** dengan arsitektur zero-config:
 
 ---
 
-## 🛠️ Cara Deploy ke Vercel (Langkah Cepat)
+## Cara Deploy ke Vercel (Langkah Cepat)
 
 ### Opsi 1: Lewat Dashboard Vercel (Rekomendasi)
 1. Buat repositori baru di GitHub (misal: `dompetku-app`).
@@ -39,7 +39,7 @@ Ikuti petunjuk di terminal, aplikasi Anda akan langsung online dengan domain pub
 
 ---
 
-## ✨ Fitur Utama
+## Fitur Utama
 
 1. **Digital Financial Receipt (Struk Belanja Digital)**:
    - Menghasilkan laporan mingguan, bulanan, dan tahunan otomatis dalam format struk thermal.
@@ -60,7 +60,7 @@ Ikuti petunjuk di terminal, aplikasi Anda akan langsung online dengan domain pub
 
 ---
 
-## 💻 Menjalankan Secara Lokal
+## Menjalankan Secara Lokal
 
 ```bash
 # Instalasi dependensi
