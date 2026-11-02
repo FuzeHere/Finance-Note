@@ -1,14 +1,14 @@
 'use client';
 
 import React from 'react';
-import { Wallet2, Sun, Moon, User, RotateCcw } from 'lucide-react';
+import { Wallet2, Sun, Moon, User, RotateCcw, Cloud, RefreshCw } from 'lucide-react';
 import { formatDateIndo, getTodayDateString } from '../../lib/finance/dates';
 import { useFinance } from '../../lib/store/financeContext';
 import { useTheme } from '../../lib/store/themeContext';
 
 export function Navbar() {
   const todayStr = getTodayDateString();
-  const { currentUser, openProfileModal, openResetModal } = useFinance();
+  const { currentUser, openProfileModal, openResetModal, isCloudActive, cloudSyncStatus } = useFinance();
   const { theme, toggleTheme } = useTheme();
 
   return (
@@ -34,18 +34,42 @@ export function Navbar() {
 
         {/* Action Controls: Akun Pengguna, Tema, dan Reset Data */}
         <div className="flex items-center gap-1.5">
-          {/* Tombol Opsi Pakai Akun / Profil */}
+          {/* Tombol Opsi Pakai Akun / Profil dengan Indikator Cloud */}
           <button
             onClick={openProfileModal}
-            className="flex items-center gap-1.5 py-1 px-2 rounded-full bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700/70 text-xs font-semibold text-slate-200 transition-colors cursor-pointer"
-            title="Pengaturan Akun"
+            className={`flex items-center gap-1.5 py-1 px-2 rounded-full border text-xs font-semibold transition-colors cursor-pointer ${
+              isCloudActive
+                ? 'bg-sky-950/40 hover:bg-sky-900/50 border-sky-500/40 text-sky-200'
+                : 'bg-slate-800/90 hover:bg-slate-700/90 border-slate-700/70 text-slate-200'
+            }`}
+            title={isCloudActive ? 'Akun Google (Cloud Sync Aktif)' : 'Pengaturan Akun'}
           >
-            <div className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-[10px] font-black shrink-0">
-              {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : <User className="w-3 h-3" />}
-            </div>
+            {currentUser.avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={currentUser.avatar}
+                alt={currentUser.name}
+                className="w-5 h-5 rounded-full object-cover shrink-0"
+              />
+            ) : (
+              <div
+                className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                  isCloudActive ? 'bg-sky-400 text-slate-950' : 'bg-emerald-500 text-slate-950'
+                }`}
+              >
+                {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : <User className="w-3 h-3" />}
+              </div>
+            )}
             <span className="text-[11px] max-w-[70px] truncate font-medium">
               {currentUser.isGuest ? 'Masuk' : currentUser.name}
             </span>
+            {isCloudActive && (
+              cloudSyncStatus === 'syncing' ? (
+                <RefreshCw className="w-3 h-3 text-sky-400 animate-spin shrink-0" />
+              ) : (
+                <Cloud className="w-3 h-3 text-sky-400 shrink-0" />
+              )
+            )}
           </button>
 
           {/* Tombol Toggle Tema Gelap / Terang */}

@@ -44,10 +44,11 @@ export default function TransactionsPage() {
         const query = searchQuery.toLowerCase();
         const cat = categories.find((c) => c.id === tx.categoryId);
         const matchNote = tx.note?.toLowerCase().includes(query);
+        const matchItems = tx.receiptItems?.some((item) => item.name.toLowerCase().includes(query));
         const matchCat = cat?.name.toLowerCase().includes(query);
         const matchAmount = String(tx.amount).includes(query);
 
-        if (!matchNote && !matchCat && !matchAmount) {
+        if (!matchNote && !matchItems && !matchCat && !matchAmount) {
           return false;
         }
       }
@@ -258,12 +259,12 @@ export default function TransactionsPage() {
                             <p className="text-xs font-bold text-white truncate">
                               {isTransfer
                                 ? `Transfer: ${srcAcc?.name || 'Asal'} → ${destAcc?.name || 'Tujuan'}`
-                                : tx.note || cat?.name || 'Transaksi'}
+                                : tx.receiptItems?.[0]?.name || tx.note || cat?.name || 'Transaksi'}
                             </p>
                             <p className="text-[11px] text-slate-400 truncate mt-0.5">
                               {isTransfer
                                 ? 'Pindah Kas'
-                                : `${cat?.name || 'Kategori'} • ${srcAcc?.name || 'Akun'}`}
+                                : `${cat?.name || 'Kategori'} • ${srcAcc?.name || 'Akun'}${tx.receiptItems && tx.receiptItems.length > 1 ? ` • ${tx.receiptItems.length} item` : ''}`}
                             </p>
                           </div>
                         </div>

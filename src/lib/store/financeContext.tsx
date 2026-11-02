@@ -1,7 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useState, useMemo, useCallback } from 'react';
-import { Account, Category, Transaction, TransactionType, UserProfile } from '../types';
+import React, { createContext, useContext, useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { Account, Category, Transaction, TransactionType, UserProfile, CloudSyncStatus } from '../types';
 import { DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES, generateSeedTransactions } from './defaults';
 import { calculateAccountBalances } from '../finance/calculations';
 
@@ -15,6 +15,17 @@ interface FinanceContextType {
   isProfileModalOpen: boolean;
   openProfileModal: () => void;
   closeProfileModal: () => void;
+
+  // Cloud Sync & Auth
+  cloudSyncStatus: CloudSyncStatus;
+  lastSyncedAt: string | null;
+  isCloudActive: boolean;
+  isGoogleConfigured: boolean;
+  syncToCloud: () => Promise<boolean>;
+  syncFromCloud: () => Promise<boolean>;
+  loginWithGoogle: () => void;
+  loginWithDemoGoogle: (email?: string, name?: string) => Promise<boolean>;
+  logoutFromCloud: () => Promise<void>;
 
   // Akun / Dompet
   accounts: Account[];
@@ -63,12 +74,14 @@ const STORAGE_KEYS = {
   TRANSACTIONS: 'pk_transactions_v1',
   PROFILES: 'pk_profiles_v1',
   CURRENT_USER: 'pk_current_user_v1',
+  LAST_SYNC: 'pk_last_cloud_sync_v1',
 };
 
 const DEFAULT_GUEST_USER: UserProfile = {
   id: 'usr-guest',
   name: 'Tamu (Lokal)',
   isGuest: true,
+  provider: 'guest',
   createdAt: new Date().toISOString(),
 };
 
@@ -85,7 +98,7 @@ function getInitialState<T>(key: string, fallback: T): T {
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
 export function FinanceProvider({ children }: { children: React.ReactNode }) {
-  // Lazy State Initializer agar tidak memicu cascading setState di effect
+  // Profile State
   const [currentUser, setCurrentUser] = useState<UserProfile>(() =>
     getInitialState(STORAGE_KEYS.CURRENT_USER, DEFAULT_GUEST_USER)
   );
@@ -94,6 +107,14 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   );
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
+  // Cloud Sync State
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatus>('idle');
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(() =>
+    getInitialState(STORAGE_KEYS.LAST_SYNC, null)
+  );
+  const [isGoogleConfigured, setIsGoogleConfigured] = useState<boolean>(true);
+
+  // Core Data States
   const [accounts, setAccounts] = useState<Account[]>(() =>
     getInitialState(STORAGE_KEYS.ACCOUNTS, DEFAULT_ACCOUNTS)
   );
@@ -103,7 +124,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>(() =>
     getInitialState(STORAGE_KEYS.TRANSACTIONS, generateSeedTransactions())
   );
-  const [isLoaded] = useState(true);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   // Undo buffer
   const [lastDeletedTransaction, setLastDeletedTransaction] = useState<Transaction | null>(null);
@@ -114,7 +135,69 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
-  // Simpan akun ke storage
+  // Sync ref to avoid stale closures
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isCloudActive = currentUser.provider === 'google';
+
+  // Cloud Sync Worker function
+  const pushToCloud = useCallback(async (
+    targetAccounts: Account[],
+    targetCategories: Category[],
+    targetTransactions: Transaction[]
+  ): Promise<boolean> => {
+    try {
+      setCloudSyncStatus('syncing');
+      const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accounts: targetAccounts,
+          categories: targetCategories,
+          transactions: targetTransactions,
+        }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const syncTime = json.updatedAt || new Date().toISOString();
+        setCloudSyncStatus('synced');
+        setLastSyncedAt(syncTime);
+        try {
+          localStorage.setItem(STORAGE_KEYS.LAST_SYNC, JSON.stringify(syncTime));
+        } catch {
+          // ignore
+        }
+        return true;
+      } else {
+        setCloudSyncStatus('error');
+        return false;
+      }
+    } catch (err) {
+      console.error('Cloud sync push error:', err);
+      setCloudSyncStatus('error');
+      return false;
+    }
+  }, []);
+
+  // Debounced auto-sync when changes occur
+  const triggerAutoSync = useCallback((
+    newAccounts: Account[],
+    newCategories: Category[],
+    newTransactions: Transaction[]
+  ) => {
+    if (currentUser.provider !== 'google') return;
+
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+    }
+
+    setCloudSyncStatus('syncing');
+    syncTimeoutRef.current = setTimeout(() => {
+      pushToCloud(newAccounts, newCategories, newTransactions);
+    }, 800);
+  }, [currentUser.provider, pushToCloud]);
+
+  // Simpan akun ke storage & sync cloud
   const saveAccounts = useCallback((newAccounts: Account[]) => {
     setAccounts(newAccounts);
     try {
@@ -122,9 +205,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       console.error('Gagal menyimpan akun ke storage:', e);
     }
-  }, []);
+    triggerAutoSync(newAccounts, categories, transactions);
+  }, [categories, transactions, triggerAutoSync]);
 
-  // Simpan kategori ke storage
+  // Simpan kategori ke storage & sync cloud
   const saveCategories = useCallback((newCategories: Category[]) => {
     setCategories(newCategories);
     try {
@@ -132,9 +216,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       console.error('Gagal menyimpan kategori ke storage:', e);
     }
-  }, []);
+    triggerAutoSync(accounts, newCategories, transactions);
+  }, [accounts, transactions, triggerAutoSync]);
 
-  // Simpan transaksi ke storage
+  // Simpan transaksi ke storage & sync cloud
   const saveTransactions = useCallback((newTransactions: Transaction[]) => {
     setTransactions(newTransactions);
     try {
@@ -142,9 +227,179 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       console.error('Gagal menyimpan transaksi ke storage:', e);
     }
+    triggerAutoSync(accounts, categories, newTransactions);
+  }, [accounts, categories, triggerAutoSync]);
+
+  // Manual Trigger: Sync data to cloud
+  const syncToCloud = useCallback(async (): Promise<boolean> => {
+    return pushToCloud(accounts, categories, transactions);
+  }, [accounts, categories, transactions, pushToCloud]);
+
+  // Manual Trigger: Pull data from cloud
+  const syncFromCloud = useCallback(async (): Promise<boolean> => {
+    try {
+      setCloudSyncStatus('syncing');
+      const res = await fetch('/api/sync');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.hasData && json.data) {
+          const cloudAccounts = json.data.accounts || DEFAULT_ACCOUNTS;
+          const cloudCategories = json.data.categories || DEFAULT_CATEGORIES;
+          const cloudTransactions = json.data.transactions || [];
+
+          setAccounts(cloudAccounts);
+          setCategories(cloudCategories);
+          setTransactions(cloudTransactions);
+
+          try {
+            localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(cloudAccounts));
+            localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(cloudCategories));
+            localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(cloudTransactions));
+          } catch {
+            // ignore
+          }
+
+          const syncTime = json.data.updatedAt || new Date().toISOString();
+          setCloudSyncStatus('synced');
+          setLastSyncedAt(syncTime);
+          return true;
+        } else if (!json.hasData) {
+          // Cloud kosong, simpan data lokal saat ini ke cloud
+          await pushToCloud(accounts, categories, transactions);
+          return true;
+        }
+      }
+      setCloudSyncStatus('error');
+      return false;
+    } catch (err) {
+      console.error('Sync from cloud failed:', err);
+      setCloudSyncStatus('error');
+      return false;
+    }
+  }, [accounts, categories, transactions, pushToCloud]);
+
+  // Check auth & sync on startup
+  useEffect(() => {
+    let isMounted = true;
+
+    async function initializeAuthAndCloud() {
+      try {
+        // Cek status Google OAuth
+        const statusRes = await fetch('/api/auth/status');
+        if (statusRes.ok) {
+          const statusData = await statusRes.json();
+          if (isMounted) {
+            setIsGoogleConfigured(Boolean(statusData.configured));
+          }
+        }
+
+        // Cek sesi login saat ini
+        const meRes = await fetch('/api/auth/me');
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData.user && isMounted) {
+            const googleUser: UserProfile = {
+              id: meData.user.id,
+              name: meData.user.name,
+              email: meData.user.email,
+              avatar: meData.user.avatar,
+              provider: 'google',
+              isGuest: false,
+              createdAt: meData.user.createdAt,
+            };
+
+            setCurrentUser(googleUser);
+            localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(googleUser));
+
+            // Pull cloud data
+            const syncRes = await fetch('/api/sync');
+            if (syncRes.ok) {
+              const syncData = await syncRes.json();
+              if (syncData.hasData && syncData.data) {
+                const cloudAccs = syncData.data.accounts || DEFAULT_ACCOUNTS;
+                const cloudCats = syncData.data.categories || DEFAULT_CATEGORIES;
+                const cloudTxs = syncData.data.transactions || [];
+
+                setAccounts(cloudAccs);
+                setCategories(cloudCats);
+                setTransactions(cloudTxs);
+
+                localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(cloudAccs));
+                localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(cloudCats));
+                localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(cloudTxs));
+
+                setCloudSyncStatus('synced');
+                setLastSyncedAt(syncData.data.updatedAt);
+              } else if (!syncData.hasData) {
+                // Initial backup of existing local data to cloud
+                const currentAccs = getInitialState(STORAGE_KEYS.ACCOUNTS, DEFAULT_ACCOUNTS);
+                const currentCats = getInitialState(STORAGE_KEYS.CATEGORIES, DEFAULT_CATEGORIES);
+                const currentTxs = getInitialState(STORAGE_KEYS.TRANSACTIONS, generateSeedTransactions());
+                pushToCloud(currentAccs, currentCats, currentTxs);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Initialization error:', err);
+      } finally {
+        if (isMounted) setIsLoaded(true);
+      }
+    }
+
+    initializeAuthAndCloud();
+
+    return () => {
+      isMounted = false;
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    };
+  }, [pushToCloud]);
+
+  // Google Login Actions
+  const loginWithGoogle = useCallback(() => {
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.href = '/api/auth/google';
   }, []);
 
-  // Profil Actions: Buat / Masuk Akun
+  const loginWithDemoGoogle = useCallback(async (email = 'pengguna.gmail@gmail.com', name = 'Pengguna Gmail Demo'): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/auth/demo-google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const user: UserProfile = json.user;
+        setCurrentUser(user);
+        localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+
+        // Sync initial data to cloud
+        await pushToCloud(accounts, categories, transactions);
+        setIsProfileModalOpen(false);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Demo login error:', err);
+      return false;
+    }
+  }, [accounts, categories, transactions, pushToCloud]);
+
+  const logoutFromCloud = useCallback(async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    setCurrentUser(DEFAULT_GUEST_USER);
+    setCloudSyncStatus('idle');
+    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(DEFAULT_GUEST_USER));
+    setIsProfileModalOpen(false);
+  }, []);
+
+  // Profil Actions: Buat / Masuk Akun Lokal
   const loginOrCreateProfile = useCallback((name: string, email?: string): UserProfile => {
     const existing = profiles.find(
       (p) => p.name.toLowerCase() === name.toLowerCase() || (email && p.email?.toLowerCase() === email.toLowerCase())
@@ -159,6 +414,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         name: name.trim(),
         email: email?.trim() || undefined,
         isGuest: false,
+        provider: 'local',
         createdAt: new Date().toISOString(),
       };
       const updatedProfiles = [...profiles, user];
@@ -182,10 +438,14 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   }, [profiles]);
 
   const logoutToGuest = useCallback(() => {
-    setCurrentUser(DEFAULT_GUEST_USER);
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(DEFAULT_GUEST_USER));
-    setIsProfileModalOpen(false);
-  }, []);
+    if (currentUser.provider === 'google') {
+      logoutFromCloud();
+    } else {
+      setCurrentUser(DEFAULT_GUEST_USER);
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(DEFAULT_GUEST_USER));
+      setIsProfileModalOpen(false);
+    }
+  }, [currentUser.provider, logoutFromCloud]);
 
   const openProfileModal = useCallback(() => setIsProfileModalOpen(true), []);
   const closeProfileModal = useCallback(() => setIsProfileModalOpen(false), []);
@@ -367,6 +627,15 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         isProfileModalOpen,
         openProfileModal,
         closeProfileModal,
+        cloudSyncStatus,
+        lastSyncedAt,
+        isCloudActive,
+        isGoogleConfigured,
+        syncToCloud,
+        syncFromCloud,
+        loginWithGoogle,
+        loginWithDemoGoogle,
+        logoutFromCloud,
         accounts: accountsWithBalance,
         categories,
         transactions,

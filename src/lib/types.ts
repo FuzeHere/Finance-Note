@@ -8,8 +8,11 @@ export interface UserProfile {
   email?: string;
   avatar?: string;
   isGuest?: boolean;
+  provider?: 'guest' | 'local' | 'google';
   createdAt: string;
 }
+
+export type CloudSyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
 
 export interface Account {
   id: string;
@@ -40,6 +43,7 @@ export interface Transaction {
   categoryId?: string; // ID kategori (untuk income/expense)
   date: string; // ISO format string: YYYY-MM-DD
   note?: string;
+  receiptItems?: Array<{ name: string; price: number }>;
   createdAt: string;
   updatedAt?: string;
 }

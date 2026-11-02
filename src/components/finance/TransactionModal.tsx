@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { X, Check, ArrowRight, Calendar, AlertCircle, AlertTriangle } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { X, Check, ArrowRight, Calendar, AlertCircle, AlertTriangle, Camera, LoaderCircle, Plus, Trash2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useFinance } from '../../lib/store/financeContext';
 import { TransactionType } from '../../lib/types';
@@ -58,6 +58,11 @@ function TransactionModalForm({
     return editingTransaction?.note || '';
   });
 
+  const [receiptItems, setReceiptItems] = useState<Array<{ name: string; price: number }>>(() => editingTransaction?.receiptItems || []);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanMessage, setScanMessage] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -81,6 +86,33 @@ function TransactionModalForm({
 
   const handleQuickAmount = (val: number) => {
     setRawAmount(String(val));
+  };
+
+  const handleReceiptScan = async (file?: File) => {
+    if (!file) return;
+    setIsScanning(true);
+    setScanMessage('Sedang membaca struk di server lokal…');
+    setErrorMessage('');
+    try {
+      const body = new FormData();
+      body.append('image', file);
+      const response = await fetch('/api/receipt/scan', { method: 'POST', body });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Struk gagal dipindai.');
+      if (result.date) setDate(result.date);
+      const extractedItems = Array.isArray(result.items) ? result.items.filter((item: { name?: string; price?: number }) => item.name && Number(item.price) > 0) : [];
+      if (extractedItems.length) setReceiptItems(extractedItems);
+      const extractedTotal = Number(result.total) || extractedItems.reduce((sum: number, item: { price: number }) => sum + Number(item.price), 0);
+      if (extractedTotal > 0) setRawAmount(String(extractedTotal));
+      const found = [result.date ? 'tanggal' : '', extractedItems.length ? `${extractedItems.length} item` : '', extractedTotal ? 'total' : ''].filter(Boolean).join(', ');
+      setScanMessage(found ? `Terbaca: ${found}. Periksa kembali sebelum menyimpan.` : 'Teks terbaca, tetapi tanggal atau item belum terdeteksi. Silakan isi manual.');
+      if (!found) setNote((previous) => previous || String(result.text || '').split('\n').filter(Boolean).slice(0, 5).join(' '));
+    } catch (error) {
+      setScanMessage(error instanceof Error ? error.message : 'Struk gagal dipindai.');
+    } finally {
+      setIsScanning(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -121,6 +153,7 @@ function TransactionModalForm({
           ...editingTransaction,
           type,
           amount: currentNumericAmount,
+          receiptItems: type === 'expense' && receiptItems.length ? receiptItems : undefined,
           accountId: selectedAccountId,
           toAccountId: type === 'transfer' ? selectedToAccountId : undefined,
           categoryId: type !== 'transfer' ? selectedCategoryId : undefined,
@@ -131,6 +164,7 @@ function TransactionModalForm({
         addTransaction({
           type,
           amount: currentNumericAmount,
+          receiptItems: type === 'expense' && receiptItems.length ? receiptItems : undefined,
           accountId: selectedAccountId,
           toAccountId: type === 'transfer' ? selectedToAccountId : undefined,
           categoryId: type !== 'transfer' ? selectedCategoryId : undefined,
@@ -216,6 +250,17 @@ function TransactionModalForm({
         </div>
       )}
 
+      {type === 'expense' && (
+        <div className="space-y-2">
+          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" onChange={(e) => void handleReceiptScan(e.target.files?.[0])} />
+          <button type="button" disabled={isScanning} onClick={() => fileInputRef.current?.click()} className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-emerald-500/50 bg-emerald-500/5 px-4 py-3 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-60">
+            {isScanning ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+            {isScanning ? 'Memindai struk…' : 'Pindai foto struk'}
+          </button>
+          {scanMessage && <p className="text-xs text-slate-400">{scanMessage}</p>}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Input Nominal Utama */}
         <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700/60 text-center">
@@ -256,6 +301,23 @@ function TransactionModalForm({
             ))}
           </div>
         </div>
+
+        {/* Kategori */}
+        {type === 'expense' && receiptItems.length > 0 && (
+          <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-slate-200">Item struk · periksa hasil scan</p>
+              <button type="button" onClick={() => setReceiptItems([...receiptItems, { name: '', price: 0 }])} className="flex items-center gap-1 text-xs text-emerald-300"><Plus className="w-3.5 h-3.5" />Tambah</button>
+            </div>
+            {receiptItems.map((item, index) => (
+              <div key={index} className="flex gap-2">
+                <input aria-label={`Nama item ${index + 1}`} value={item.name} onChange={(e) => setReceiptItems(receiptItems.map((row, i) => i === index ? { ...row, name: e.target.value } : row))} placeholder="Nama item" className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs text-white" />
+                <input aria-label={`Harga item ${index + 1}`} type="number" min="0" value={item.price || ''} onChange={(e) => setReceiptItems(receiptItems.map((row, i) => i === index ? { ...row, price: Number(e.target.value) || 0 } : row))} placeholder="Harga" className="w-28 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs text-white" />
+                <button type="button" aria-label={`Hapus item ${index + 1}`} onClick={() => setReceiptItems(receiptItems.filter((_, i) => i !== index))} className="p-2 text-slate-400 hover:text-rose-300"><Trash2 className="w-4 h-4" /></button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Kategori */}
         {type !== 'transfer' && (

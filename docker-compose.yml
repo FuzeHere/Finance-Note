@@ -1,0 +1,24 @@
+services:
+  finance-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: finance-note
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    environment:
+      - NODE_ENV=production
+      - PORT=3100
+      - HOSTNAME=0.0.0.0
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3100}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - DATABASE_PATH=/app/data/finance.sqlite
+    volumes:
+      # Data SQLite persisten (tidak hilang walau container di-restart/di-upgrade)
+      - finance_data:/app/data
+
+volumes:
+  finance_data:
+    driver: local
