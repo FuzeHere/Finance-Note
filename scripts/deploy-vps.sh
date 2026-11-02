@@ -79,6 +79,8 @@ if command -v ufw >/dev/null 2>&1 && sudo ufw status 2>/dev/null | grep -q "Stat
 fi
 
 say "Menjalankan ulang layanan Finance-Note melalui PM2"
+# PM2 restart can retain an existing process interpreter; recreate OCR so a backend switch is applied.
+pm2 delete finance-note-ocr >/dev/null 2>&1 || true
 pm2 startOrRestart ecosystem.config.cjs --update-env
 pm2 save
 if ! systemctl is-enabled "pm2-$(id -un)" >/dev/null 2>&1; then
