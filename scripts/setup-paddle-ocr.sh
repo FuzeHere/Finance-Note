@@ -17,6 +17,11 @@ install_tesseract_fallback() {
   echo "PaddlePaddle cannot run on this CPU; configured offline Tesseract OCR (Indonesian + English)."
 }
 
+if [[ -f "$ENGINE_FILE" && "$(<"$ENGINE_FILE")" == "tesseract" && "${FINANCE_NOTE_RETRY_PADDLE:-0}" != "1" ]]; then
+  install_tesseract_fallback
+  exit 0
+fi
+
 # Paddle's x86 CPU wheel requires AVX. Some VPS hosts expose older virtual CPUs.
 if ! grep -qw avx /proc/cpuinfo 2>/dev/null; then
   install_tesseract_fallback
