@@ -128,7 +128,7 @@ class OCRHandler(BaseHTTPRequestHandler):
                 text = text_rows(prediction[0]) if prediction else ""
             self._send_json(200, {"text": text})
         except Exception:
-            logging.exception("PaddleOCR prediction failed")
+            logging.exception("Receipt OCR prediction failed")
             self._send_json(503, {"error": "OCR prediction failed"})
         finally:
             if temp_path is not None:
@@ -143,7 +143,7 @@ def main():
     parser.add_argument("--warmup", action="store_true", help="download/cache models and exit")
     args = parser.parse_args()
 
-    engine_path = Path(__file__).resolve().parent / ".ocr-engine"
+    engine_path = Path(__file__).resolve().parent.parent / ".ocr-engine"
     engine = os.environ.get("OCR_ENGINE") or (engine_path.read_text().strip() if engine_path.exists() else "paddle")
     if engine == "tesseract":
         languages = subprocess.run(["tesseract", "--list-langs"], check=True, capture_output=True, text=True).stdout
