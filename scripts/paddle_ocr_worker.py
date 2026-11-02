@@ -5,11 +5,10 @@ import argparse
 import json
 import logging
 import os
+import subprocess
 import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-
-from paddleocr import PaddleOCR
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -21,6 +20,8 @@ SUPPORTED_TYPES = {
 
 
 def build_ocr():
+    from paddleocr import PaddleOCR
+
     return PaddleOCR(
         lang="id",
         ocr_version="PP-OCRv6",
@@ -113,8 +114,18 @@ class OCRHandler(BaseHTTPRequestHandler):
             with tempfile.NamedTemporaryFile(prefix="finance-receipt-", suffix=extension, delete=False) as temp:
                 temp.write(image)
                 temp_path = Path(temp.name)
-            prediction = self.server.ocr.predict(str(temp_path))
-            text = text_rows(prediction[0]) if prediction else ""
+            if self.server.engine == "tesseract":
+                result = subprocess.run(
+                    ["tesseract", str(temp_path), "stdout", "-l", "ind+eng", "--psm", "6"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                text = result.stdout.strip()
+            else:
+                prediction = self.server.ocr.predict(str(temp_path))
+                text = text_rows(prediction[0]) if prediction else ""
             self._send_json(200, {"text": text})
         except Exception:
             logging.exception("PaddleOCR prediction failed")
@@ -132,15 +143,29 @@ def main():
     parser.add_argument("--warmup", action="store_true", help="download/cache models and exit")
     args = parser.parse_args()
 
-    ocr = build_ocr()
-    logging.info("PaddleOCR PP-OCRv6 small ready for Indonesian receipts")
-    if args.warmup:
-        return
+    engine_path = Path(__file__).resolve().parent / ".ocr-engine"
+    engine = os.environ.get("OCR_ENGINE") or (engine_path.read_text().strip() if engine_path.exists() else "paddle")
+    if engine == "tesseract":
+        languages = subprocess.run(["tesseract", "--list-langs"], check=True, capture_output=True, text=True).stdout
+        if "ind" not in languages or "eng" not in languages:
+            raise RuntimeError("Tesseract language data ind+eng is missing")
+        logging.info("Tesseract CPU OCR ready for Indonesian receipts")
+        if args.warmup:
+            return
+        ocr = None
+    elif engine == "paddle":
+        ocr = build_ocr()
+        logging.info("PaddleOCR PP-OCRv6 small ready for Indonesian receipts")
+        if args.warmup:
+            return
+    else:
+        raise RuntimeError(f"Unsupported OCR_ENGINE: {engine}")
 
     host = os.environ.get("PADDLE_OCR_HOST", "127.0.0.1")
     port = int(os.environ.get("PADDLE_OCR_PORT", "3101"))
     server = HTTPServer((host, port), OCRHandler)
     server.ocr = ocr
+    server.engine = engine
     logging.info("PaddleOCR worker listening on %s:%s", host, port)
     try:
         server.serve_forever()

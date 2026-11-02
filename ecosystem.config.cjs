@@ -1,9 +1,17 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+const fs = require('node:fs');
+const path = require('node:path');
+const ocrEnginePath = path.join(__dirname, '.ocr-engine');
+const ocrEngine = process.env.OCR_ENGINE || (fs.existsSync(ocrEnginePath)
+  ? fs.readFileSync(ocrEnginePath, 'utf8').trim()
+  : 'paddle');
+
 module.exports = {
   apps: [
     {
       name: 'finance-note-ocr',
       script: 'scripts/paddle_ocr_worker.py',
-      interpreter: `${__dirname}/.venv-paddle/bin/python`,
+      interpreter: ocrEngine === 'tesseract' ? 'python3' : `${__dirname}/.venv-paddle/bin/python`,
       cwd: __dirname,
       exec_mode: 'fork',
       instances: 1,

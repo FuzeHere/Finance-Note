@@ -42,7 +42,7 @@ command -v apt-get >/dev/null 2>&1 || fail "Script ini khusus Ubuntu/Debian deng
 
 say "Memasang pustaka sistem untuk OCR"
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl git libgl1 libglib2.0-0 libgomp1
+sudo apt-get install -y ca-certificates curl git libgl1 libglib2.0-0 libgomp1 tesseract-ocr tesseract-ocr-ind tesseract-ocr-eng
 
 command -v node >/dev/null 2>&1 || fail "Node.js 22 atau lebih baru belum terpasang."
 NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])')"
