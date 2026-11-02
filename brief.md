@@ -214,7 +214,6 @@ These features must exist before considering the first usable release complete.
 
 ### P2 — Advanced
 
-- Receipt OCR
 - Voice transaction input
 - Cash-flow forecasting
 - Subscription tracking
@@ -996,30 +995,6 @@ Do not mix debt records into ordinary income/expense totals unless a deliberate 
 
 ---
 
-# 26. Receipt Scanner
-
-P2.
-
-Possible flow:
-
-```text
-Take Photo
-    ↓
-OCR
-    ↓
-Extract merchant/date/items/total
-    ↓
-Suggest category
-    ↓
-User confirms
-    ↓
-Create transaction
-```
-
-Never automatically record an OCR result without user confirmation.
-
----
-
 # 27. Voice Input
 
 P2.
@@ -1119,7 +1094,6 @@ Do not add infrastructure merely because it is technically possible.
 Examples of features that may increase costs later:
 
 - Large file storage
-- Heavy OCR processing
 - AI API usage
 - High-frequency background jobs
 - Large analytics workloads
@@ -1739,7 +1713,6 @@ Offline capabilities
 
 Phase 7
 Advanced features
-OCR
 Voice input
 Forecasting
 AI assistance

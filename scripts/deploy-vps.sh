@@ -40,9 +40,9 @@ cd "$INSTALL_DIR"
 command -v sudo >/dev/null 2>&1 || fail "sudo tidak ditemukan."
 command -v apt-get >/dev/null 2>&1 || fail "Script ini khusus Ubuntu/Debian dengan apt."
 
-say "Memasang pustaka sistem untuk OCR"
+say "Memasang pustaka sistem aplikasi"
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl git libgl1 libglib2.0-0 libgomp1 tesseract-ocr tesseract-ocr-ind tesseract-ocr-eng
+sudo apt-get install -y ca-certificates curl git
 
 command -v node >/dev/null 2>&1 || fail "Node.js 22 atau lebih baru belum terpasang."
 NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])')"
@@ -63,9 +63,6 @@ fi
 say "Menyiapkan direktori database"
 sudo install -d -o "$(id -un)" -g "$(id -gn)" /var/lib/finance-note
 
-say "Memasang PaddleOCR dengan Python 3.13 dan mengunduh model CPU untuk pemakaian offline"
-bash scripts/setup-paddle-ocr.sh
-
 say "Memasang dependency Node dan membangun aplikasi"
 npm ci
 npm run build
@@ -79,8 +76,12 @@ if command -v ufw >/dev/null 2>&1 && sudo ufw status 2>/dev/null | grep -q "Stat
 fi
 
 say "Menjalankan ulang layanan Finance-Note melalui PM2"
-# PM2 restart can retain an existing process interpreter; recreate OCR so a backend switch is applied.
+# Remove the former OCR process and its project-local Python/model artifacts.
 pm2 delete finance-note-ocr >/dev/null 2>&1 || true
+rm -rf -- .venv-paddle .paddlex .ocr-engine
+if dpkg-query -W -f='${db:Status-Status}' tesseract-ocr 2>/dev/null | grep -qx installed; then
+  sudo apt-get purge -y tesseract-ocr tesseract-ocr-ind tesseract-ocr-eng
+fi
 pm2 startOrRestart ecosystem.config.cjs --update-env
 pm2 save
 if ! systemctl is-enabled "pm2-$(id -un)" >/dev/null 2>&1; then
@@ -88,15 +89,7 @@ if ! systemctl is-enabled "pm2-$(id -un)" >/dev/null 2>&1; then
   sudo env "PATH=$PATH" "$PM2_BIN" startup systemd -u "$(id -un)" --hp "$HOME"
 fi
 
-say "Memeriksa kesiapan OCR dan aplikasi"
-for attempt in $(seq 1 120); do
-  if curl --silent --fail http://127.0.0.1:3101/health >/dev/null; then break; fi
-  if [[ "$attempt" -eq 120 ]]; then
-    pm2 logs finance-note-ocr --lines 80 --nostream || true
-    fail "Worker OCR belum siap. Periksa log di atas."
-  fi
-  sleep 2
-done
+say "Memeriksa kesiapan aplikasi"
 for attempt in $(seq 1 30); do
   if curl --silent --fail http://127.0.0.1:3100/ >/dev/null; then break; fi
   if [[ "$attempt" -eq 30 ]]; then

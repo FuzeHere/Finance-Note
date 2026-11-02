@@ -1,8 +1,5 @@
 # dependencies
 /node_modules
-/.venv-paddle/
-.ocr-engine
-.paddlex/
 __pycache__/
 /.pnp
 .pnp.*
