@@ -1,25 +1,8 @@
-import { spawn } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-
 export interface ReceiptScanResult {
   date: string | null;
   items: Array<{ name: string; price: number }>;
   total: number | null;
   text: string;
-}
-
-function runTesseract(imagePath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(/* turbopackIgnore: true */ process.env.TESSERACT_CMD || 'tesseract', [imagePath, 'stdout', '-l', 'ind+eng', '--psm', '6'], { stdio: ['ignore', 'pipe', 'pipe'] });
-    let output = '';
-    let error = '';
-    child.stdout.setEncoding('utf8').on('data', (chunk: string) => { output += chunk; });
-    child.stderr.setEncoding('utf8').on('data', (chunk: string) => { error += chunk; });
-    child.on('error', reject);
-    child.on('close', (code) => code === 0 ? resolve(output) : reject(new Error(error || `Tesseract exited with code ${code}`)));
-  });
 }
 
 function parseRupiah(value: string): number | null {
@@ -74,13 +57,16 @@ export function parseReceiptText(text: string): ReceiptScanResult {
   return { date: parseDate(text), items: items.slice(0, 50), total, text: text.slice(0, 12000) };
 }
 
-export async function scanReceipt(image: Buffer, extension: string): Promise<ReceiptScanResult> {
-  const directory = await mkdtemp(path.join(tmpdir(), 'finance-receipt-'));
-  const imagePath = path.join(directory, `receipt.${extension}`);
-  try {
-    await writeFile(imagePath, image, { mode: 0o600 });
-    return parseReceiptText(await runTesseract(imagePath));
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
+export async function scanReceipt(image: Buffer, contentType: string): Promise<ReceiptScanResult> {
+  const endpoint = process.env.PADDLE_OCR_URL || 'http://127.0.0.1:3101/scan';
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'content-type': contentType },
+    body: new Uint8Array(image),
+    signal: AbortSignal.timeout(120_000),
+  });
+
+  if (!response.ok) throw new Error(`PaddleOCR service returned ${response.status}`);
+  const result = await response.json() as { text?: string };
+  return parseReceiptText(typeof result.text === 'string' ? result.text : '');
 }

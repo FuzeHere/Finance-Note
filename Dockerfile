@@ -25,9 +25,6 @@ RUN npm run build
 FROM base AS runner
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-ind tesseract-ocr-eng && \
-    rm -rf /var/lib/apt/lists/*
-
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3100

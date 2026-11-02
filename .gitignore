@@ -1,5 +1,8 @@
 # dependencies
 /node_modules
+/.venv-paddle/
+.paddlex/
+__pycache__/
 /.pnp
 .pnp.*
 .yarn/*

@@ -1,4 +1,22 @@
 services:
+  finance-ocr:
+    build:
+      context: .
+      dockerfile: deploy/paddle-ocr.Dockerfile
+    container_name: finance-note-ocr
+    restart: unless-stopped
+    environment:
+      - PADDLE_OCR_HOST=0.0.0.0
+      - PADDLE_OCR_PORT=3101
+    volumes:
+      - paddle_models:/home/ocr/.paddlex
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:3101/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 20
+      start_period: 180s
+
   finance-app:
     build:
       context: .
@@ -11,6 +29,7 @@ services:
       - NODE_ENV=production
       - PORT=3100
       - HOSTNAME=0.0.0.0
+      - PADDLE_OCR_URL=http://finance-ocr:3101/scan
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3100}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
@@ -18,7 +37,12 @@ services:
     volumes:
       # Data SQLite persisten (tidak hilang walau container di-restart/di-upgrade)
       - finance_data:/app/data
+    depends_on:
+      finance-ocr:
+        condition: service_healthy
 
 volumes:
   finance_data:
+    driver: local
+  paddle_models:
     driver: local

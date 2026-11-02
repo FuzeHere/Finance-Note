@@ -10,5 +10,5 @@ Laporan mingguan, bulanan, dan tahunan merangkum arus kas serta pengeluaran berd
 - Kategori untuk membantu mengelompokkan transaksi.
 - Laporan keuangan berkala dalam tampilan bergaya struk digital.
 - Pemindaian foto struk untuk mengisi tanggal, nama dan harga item, serta total sebagai draf yang dapat diperiksa sebelum disimpan.
-- Pemrosesan OCR lokal dengan Tesseract saat aplikasi dijalankan di server sendiri.
+- Pemrosesan OCR lokal dengan PaddleOCR saat aplikasi dijalankan di server sendiri.
 - Mode tamu dengan penyimpanan lokal dan opsi sinkronisasi akun.
