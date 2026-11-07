@@ -20,11 +20,9 @@ interface FinanceContextType {
   cloudSyncStatus: CloudSyncStatus;
   lastSyncedAt: string | null;
   isCloudActive: boolean;
-  isGoogleConfigured: boolean;
   syncToCloud: () => Promise<boolean>;
   syncFromCloud: () => Promise<boolean>;
-  loginWithGoogle: () => void;
-  loginWithDemoGoogle: (email?: string, name?: string) => Promise<boolean>;
+  loginWithLocalAccount: (email: string, password: string, registerName?: string) => Promise<string | null>;
   logoutFromCloud: () => Promise<void>;
 
   // Akun / Dompet
@@ -112,7 +110,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(() =>
     getInitialState(STORAGE_KEYS.LAST_SYNC, null)
   );
-  const [isGoogleConfigured, setIsGoogleConfigured] = useState<boolean>(true);
 
   // Core Data States
   const [accounts, setAccounts] = useState<Account[]>(() =>
@@ -137,7 +134,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   // Sync ref to avoid stale closures
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isCloudActive = currentUser.provider === 'google';
+  const isCloudActive = currentUser.provider === 'local' || currentUser.provider === 'google';
 
   // Cloud Sync Worker function
   const pushToCloud = useCallback(async (
@@ -185,7 +182,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     newCategories: Category[],
     newTransactions: Transaction[]
   ) => {
-    if (currentUser.provider !== 'google') return;
+    if (currentUser.provider !== 'local' && currentUser.provider !== 'google') return;
 
     if (syncTimeoutRef.current) {
       clearTimeout(syncTimeoutRef.current);
@@ -284,32 +281,23 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
     async function initializeAuthAndCloud() {
       try {
-        // Cek status Google OAuth
-        const statusRes = await fetch('/api/auth/status');
-        if (statusRes.ok) {
-          const statusData = await statusRes.json();
-          if (isMounted) {
-            setIsGoogleConfigured(Boolean(statusData.configured));
-          }
-        }
-
         // Cek sesi login saat ini
         const meRes = await fetch('/api/auth/me');
         if (meRes.ok) {
           const meData = await meRes.json();
           if (meData.user && isMounted) {
-            const googleUser: UserProfile = {
+            const accountUser: UserProfile = {
               id: meData.user.id,
               name: meData.user.name,
               email: meData.user.email,
               avatar: meData.user.avatar,
-              provider: 'google',
+              provider: meData.user.provider || 'local',
               isGuest: false,
               createdAt: meData.user.createdAt,
             };
 
-            setCurrentUser(googleUser);
-            localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(googleUser));
+            setCurrentUser(accountUser);
+            localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(accountUser));
 
             // Pull cloud data
             const syncRes = await fetch('/api/sync');
@@ -355,36 +343,21 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     };
   }, [pushToCloud]);
 
-  // Google Login Actions
-  const loginWithGoogle = useCallback(() => {
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.href = '/api/auth/google';
-  }, []);
-
-  const loginWithDemoGoogle = useCallback(async (email = 'pengguna.gmail@gmail.com', name = 'Pengguna Gmail Demo'): Promise<boolean> => {
+  const loginWithLocalAccount = useCallback(async (email: string, password: string, registerName?: string): Promise<string | null> => {
     try {
-      const res = await fetch('/api/auth/demo-google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name }),
+      const response = await fetch(registerName ? '/api/auth/register' : '/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(registerName ? { name: registerName, email, password } : { email, password }),
       });
-
-      if (res.ok) {
-        const json = await res.json();
-        const user: UserProfile = json.user;
-        setCurrentUser(user);
-        localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
-
-        // Sync initial data to cloud
-        await pushToCloud(accounts, categories, transactions);
-        setIsProfileModalOpen(false);
-        return true;
-      }
-      return false;
-    } catch (err) {
-      console.error('Demo login error:', err);
-      return false;
-    }
+      const result = await response.json();
+      if (!response.ok) return result.message || 'Tidak dapat masuk.';
+      const user: UserProfile = { ...result.user, isGuest: false, provider: 'local' };
+      setCurrentUser(user);
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+      await pushToCloud(accounts, categories, transactions);
+      setIsProfileModalOpen(false);
+      return null;
+    } catch { return 'Koneksi bermasalah. Silakan coba lagi.'; }
   }, [accounts, categories, transactions, pushToCloud]);
 
   const logoutFromCloud = useCallback(async () => {
@@ -438,7 +411,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   }, [profiles]);
 
   const logoutToGuest = useCallback(() => {
-    if (currentUser.provider === 'google') {
+    if (currentUser.provider === 'google' || currentUser.provider === 'local') {
       logoutFromCloud();
     } else {
       setCurrentUser(DEFAULT_GUEST_USER);
@@ -630,11 +603,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         cloudSyncStatus,
         lastSyncedAt,
         isCloudActive,
-        isGoogleConfigured,
         syncToCloud,
         syncFromCloud,
-        loginWithGoogle,
-        loginWithDemoGoogle,
+        loginWithLocalAccount,
         logoutFromCloud,
         accounts: accountsWithBalance,
         categories,

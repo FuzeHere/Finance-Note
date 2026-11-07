@@ -13,7 +13,7 @@ import {
 type ReportPeriodType = 'weekly' | 'monthly' | 'yearly';
 
 export default function ReportsPage() {
-  const { transactions, categories, isLoaded } = useFinance();
+  const { transactions, categories, accounts, isLoaded } = useFinance();
 
   const [periodType, setPeriodType] = useState<ReportPeriodType>('monthly');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
@@ -147,7 +147,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Kartu Struk Keuangan Digital */}
-      <ReceiptCard report={activeReport} />
+      <ReceiptCard report={activeReport} accounts={accounts} />
     </div>
   );
 }

@@ -84,6 +84,16 @@ export interface ReceiptReport {
   
   // Breakdown
   topCategories: CategoryTotal[];
+  incomeCategories: CategoryTotal[];
+  totalTransfers: number;
+  transactionDetails: Array<{
+    id: string;
+    date: string;
+    type: TransactionType;
+    title: string;
+    accountId: string;
+    amount: number;
+  }>;
   largestExpense?: {
     title: string;
     amount: number;

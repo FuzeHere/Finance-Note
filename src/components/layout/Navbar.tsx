@@ -42,7 +42,7 @@ export function Navbar() {
                 ? 'bg-sky-950/40 hover:bg-sky-900/50 border-sky-500/40 text-sky-200'
                 : 'bg-slate-800/90 hover:bg-slate-700/90 border-slate-700/70 text-slate-200'
             }`}
-            title={isCloudActive ? 'Akun Google (Cloud Sync Aktif)' : 'Pengaturan Akun'}
+            title={isCloudActive ? 'Akun DompetKu (Cloud Sync Aktif)' : 'Pengaturan Akun'}
           >
             {currentUser.avatar ? (
               // eslint-disable-next-line @next/next/no-img-element

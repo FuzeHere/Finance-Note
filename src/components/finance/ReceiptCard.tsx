@@ -4,13 +4,15 @@ import React, { useRef, useState } from 'react';
 import { toPng } from 'html-to-image';
 import { Download, Copy, Check, TrendingUp, TrendingDown, Sparkles } from 'lucide-react';
 import { ReceiptReport } from '../../lib/types';
+import { Account } from '../../lib/types';
 import { formatIDR, formatSignedIDR } from '../../lib/finance/currency';
 
 interface ReceiptCardProps {
   report: ReceiptReport;
+  accounts?: Account[];
 }
 
-export function ReceiptCard({ report }: ReceiptCardProps) {
+export function ReceiptCard({ report, accounts = [] }: ReceiptCardProps) {
   const receiptRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -21,6 +23,7 @@ export function ReceiptCard({ report }: ReceiptCardProps) {
     text += `━━━━━━━━━━━━━━━━━━━━━\n`;
     text += `🟢 Pemasukan: ${formatIDR(report.totalIncome)}\n`;
     text += `🔴 Pengeluaran: ${formatIDR(report.totalExpense)}\n`;
+    text += `🔁 Transfer antar akun: ${formatIDR(report.totalTransfers)}\n`;
     text += `💰 Arus Kas Bersih: ${formatSignedIDR(report.netCashFlow, report.netCashFlow >= 0 ? 'income' : 'expense')}\n`;
     
     if (report.savingsRate !== null) {
@@ -30,6 +33,10 @@ export function ReceiptCard({ report }: ReceiptCardProps) {
     text += `\n*Pengeluaran Terbesar:*\n`;
     report.topCategories.forEach((cat, idx) => {
       text += `${idx + 1}. ${cat.categoryIcon} ${cat.categoryName}: ${formatIDR(cat.totalAmount)} (${cat.percentage}%)\n`;
+    });
+    text += `\n*Rincian transaksi (${report.transactionDetails.length}):*\n`;
+    report.transactionDetails.forEach((tx) => {
+      text += `${tx.date} • ${tx.title} • ${formatIDR(tx.amount)}\n`;
     });
 
     if (report.insights.length > 0) {
@@ -109,6 +116,10 @@ export function ReceiptCard({ report }: ReceiptCardProps) {
             <span className="font-semibold">PENGELUARAN</span>
             <span className="font-bold">-{formatIDR(report.totalExpense, false)}</span>
           </div>
+          <div className="flex justify-between items-center text-slate-600">
+            <span className="font-semibold">TRANSFER ANTAR AKUN</span>
+            <span className="font-bold">{formatIDR(report.totalTransfers, false)}</span>
+          </div>
           
           <div className="receipt-dotted-divider" />
 
@@ -126,6 +137,18 @@ export function ReceiptCard({ report }: ReceiptCardProps) {
             </div>
           )}
         </div>
+
+        <div className="receipt-dotted-divider" />
+
+        <section>
+          <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-stone-500">Rincian pemasukan</h3>
+          {report.incomeCategories.length ? report.incomeCategories.map((cat) => (
+            <div key={cat.categoryId} className="flex justify-between gap-2 py-1 text-xs">
+              <span className="truncate text-stone-700">{cat.categoryIcon} {cat.categoryName} <span className="text-stone-400">({cat.count}x)</span></span>
+              <span className="shrink-0 font-semibold receipt-mono">{formatIDR(cat.totalAmount)}</span>
+            </div>
+          )) : <p className="text-xs italic text-stone-400">Tidak ada pemasukan.</p>}
+        </section>
 
         <div className="receipt-dashed-divider" />
 
@@ -176,6 +199,25 @@ export function ReceiptCard({ report }: ReceiptCardProps) {
             </div>
           </>
         )}
+
+        <div className="receipt-dashed-divider" />
+
+        <section>
+          <div className="mb-2 flex justify-between text-[10px] font-bold uppercase tracking-wider text-stone-500">
+            <h3>Buku transaksi</h3><span>{report.transactionDetails.length} baris</span>
+          </div>
+          {report.transactionDetails.length ? <div className="space-y-1">
+            {report.transactionDetails.map((tx) => {
+              const account = accounts.find((item) => item.id === tx.accountId);
+              const label = tx.type === 'income' ? 'Masuk' : tx.type === 'expense' ? 'Keluar' : 'Transfer';
+              const tone = tx.type === 'income' ? 'text-emerald-700' : tx.type === 'expense' ? 'text-rose-700' : 'text-sky-700';
+              return <div key={tx.id} className="border-b border-dashed border-stone-200 py-1.5 text-[10px]">
+                <div className="flex items-start justify-between gap-2"><span className="min-w-0 truncate font-semibold text-stone-800">{tx.title}</span><span className={`shrink-0 font-bold receipt-mono ${tone}`}>{tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : ''}{formatIDR(tx.amount, false)}</span></div>
+                <div className="mt-0.5 flex justify-between gap-2 text-stone-500"><span>{new Date(`${tx.date}T00:00:00`).toLocaleDateString('id-ID')} · {label}</span><span className="truncate">{account?.name || 'Akun'}</span></div>
+              </div>;
+            })}
+          </div> : <p className="text-xs italic text-stone-400">Tidak ada transaksi periode ini.</p>}
+        </section>
 
         {/* Perbandingan Periode */}
         {report.expenseComparison.status !== 'no_history' && report.expenseComparison.percentageChange !== null && (

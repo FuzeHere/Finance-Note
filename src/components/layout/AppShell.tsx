@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { usePathname } from 'next/navigation';
 import { FinanceProvider, useFinance } from '../../lib/store/financeContext';
 import { ThemeProvider, useTheme } from '../../lib/store/themeContext';
 import { Navbar } from './Navbar';
@@ -10,8 +11,10 @@ import { ProfileModal } from '../profile/ProfileModal';
 import { ResetAllDataModal } from '../common/ResetAllDataModal';
 
 function AppContent({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const { isAddModalOpen, closeAddModal, initialModalType } = useFinance();
   const { theme } = useTheme();
+  if (pathname === '/login' || pathname === '/register') return <>{children}</>;
 
   return (
     <div

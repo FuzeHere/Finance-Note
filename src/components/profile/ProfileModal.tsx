@@ -1,32 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { User, Mail, LogIn, LogOut, Check, X, Shield, Plus, Cloud, CloudCheck, RefreshCw, AlertCircle, Sparkles } from 'lucide-react';
+import Link from 'next/link';
+import { User, Mail, LogIn, LogOut, Check, X, Shield, Plus, Cloud, CloudCheck, RefreshCw, AlertCircle } from 'lucide-react';
 import { useFinance } from '../../lib/store/financeContext';
-
-// Google Icon SVG Resmi
-function GoogleLogo({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path
-        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-        fill="#4285F4"
-      />
-      <path
-        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-        fill="#34A853"
-      />
-      <path
-        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-        fill="#FBBC05"
-      />
-      <path
-        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-        fill="#EA4335"
-      />
-    </svg>
-  );
-}
 
 export function ProfileModal() {
   const {
@@ -40,10 +17,7 @@ export function ProfileModal() {
     cloudSyncStatus,
     lastSyncedAt,
     isCloudActive,
-    isGoogleConfigured,
     syncToCloud,
-    loginWithGoogle,
-    loginWithDemoGoogle,
     logoutFromCloud,
   } = useFinance();
 
@@ -51,7 +25,6 @@ export function ProfileModal() {
   const [email, setEmail] = useState('');
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [demoLoading, setDemoLoading] = useState(false);
 
   if (!isProfileModalOpen) return null;
 
@@ -69,12 +42,6 @@ export function ProfileModal() {
     setIsSyncing(true);
     await syncToCloud();
     setTimeout(() => setIsSyncing(false), 600);
-  };
-
-  const handleDemoLogin = async () => {
-    setDemoLoading(true);
-    await loginWithDemoGoogle('budi.santoso@gmail.com', 'Budi Santoso');
-    setDemoLoading(false);
   };
 
   const formatSyncTime = (isoString: string | null) => {
@@ -99,7 +66,7 @@ export function ProfileModal() {
             <div>
               <h3 className="text-sm font-bold text-white">Akun & Cloud Sync</h3>
               <p className="text-[11px] text-slate-400">
-                {isCloudActive ? 'Akun Google (Cloud Aktif)' : currentUser.isGuest ? 'Mode Tamu (Offline)' : 'Akun Lokal'}
+                {isCloudActive ? 'Akun DompetKu (Cloud Aktif)' : currentUser.isGuest ? 'Mode Tamu (Offline)' : 'Akun Lokal'}
               </p>
             </div>
           </div>
@@ -154,7 +121,7 @@ export function ProfileModal() {
             )}
           </div>
 
-          {/* Cloud Sync Status Info for Logged-In Google Users */}
+          {/* Cloud Sync Status Info for Account Users */}
           {isCloudActive && (
             <div className="pt-2 border-t border-slate-700/50 flex items-center justify-between text-[11px]">
               <div className="flex items-center gap-1.5 text-slate-400">
@@ -188,51 +155,15 @@ export function ProfileModal() {
           )}
         </div>
 
-        {/* Section: Login Gmail (Cloud Sync) */}
+        {/* Section: Akun DompetKu */}
         {!isCloudActive && (
-          <div className="space-y-2 p-3 bg-gradient-to-b from-sky-950/30 to-slate-800/40 border border-sky-800/30 rounded-2xl">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-              <span className="text-xs font-bold text-white">Sinkronisasi Cloud dengan Gmail</span>
+          <div className="space-y-2 p-3 bg-slate-800/50 border border-slate-700/60 rounded-2xl">
+            <span className="text-xs font-bold text-white">Masuk ke akun DompetKu</span>
+            <p className="text-[11px] text-slate-300 leading-relaxed">Buat akun dengan email dan kata sandi untuk menyimpan data di cloud dan mengaksesnya dari perangkat lain.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Link href="/login" onClick={closeProfileModal} className="rounded-xl bg-emerald-500 py-2.5 text-center text-xs font-bold text-slate-950">Masuk</Link>
+              <Link href="/register" onClick={closeProfileModal} className="rounded-xl border border-slate-600 py-2.5 text-center text-xs font-bold text-slate-100">Daftar</Link>
             </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              Login dengan Google agar transaksi & akun tersimpan aman di cloud dan dapat dibuka dari berbagai perangkat (HP/Laptop).
-            </p>
-
-            {isGoogleConfigured ? (
-              <button
-                onClick={loginWithGoogle}
-                className="w-full py-2.5 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-2.5 active:scale-[0.98]"
-              >
-                <GoogleLogo className="w-4 h-4" />
-                <span>Masuk dengan Akun Google</span>
-              </button>
-            ) : (
-              <div className="space-y-2">
-                <button
-                  onClick={loginWithGoogle}
-                  className="w-full py-2.5 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-2.5"
-                >
-                  <GoogleLogo className="w-4 h-4" />
-                  <span>Masuk dengan Google (OAuth)</span>
-                </button>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <div className="h-px bg-slate-700 flex-1" />
-                  <span className="text-[10px] text-slate-500 font-semibold uppercase">atau coba langsung</span>
-                  <div className="h-px bg-slate-700 flex-1" />
-                </div>
-
-                <button
-                  onClick={handleDemoLogin}
-                  disabled={demoLoading}
-                  className="w-full py-2 px-3 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 font-semibold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-                >
-                  <Cloud className="w-3.5 h-3.5" />
-                  <span>{demoLoading ? 'Menghubungkan...' : 'Login Gmail Simulasi (Demo Cloud)'}</span>
-                </button>
-              </div>
-            )}
           </div>
         )}
 
@@ -343,7 +274,7 @@ export function ProfileModal() {
           <span>
             {isCloudActive
               ? 'Tersimpan aman & terenkripsi di server database cloud Anda.'
-              : 'Data tersimpan lokal di browser. Login Google untuk backup cloud.'}
+              : 'Data tersimpan lokal di browser. Masuk ke akun DompetKu untuk backup cloud.'}
           </span>
         </div>
       </div>

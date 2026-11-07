@@ -49,7 +49,8 @@ export function getDatabase(): DatabaseSync {
       email TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
       avatar TEXT,
-      provider TEXT DEFAULT 'google',
+      provider TEXT DEFAULT 'local',
+      password_hash TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -75,8 +76,38 @@ export function getDatabase(): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
   `);
 
+  // Migrate databases created before password-based accounts were added.
+  const userColumns = db.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>;
+  if (!userColumns.some((column) => column.name === 'password_hash')) {
+    db.exec('ALTER TABLE users ADD COLUMN password_hash TEXT');
+  }
+
   globalForDb.financeDbInstance = db;
   return db;
+}
+
+export function createLocalUser(email: string, name: string, passwordHash: string): DbUser {
+  const db = getDatabase();
+  const now = new Date().toISOString();
+  const id = `usr_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  db.prepare(`INSERT INTO users (id, email, name, provider, password_hash, created_at, updated_at)
+    VALUES (?, ?, ?, 'local', ?, ?, ?)`).run(id, email, name, passwordHash, now, now);
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(id) as DbUser;
+}
+
+export function getUserByEmail(email: string): (DbUser & { password_hash: string | null }) | null {
+  return (getDatabase().prepare('SELECT * FROM users WHERE email = ?').get(email) as (DbUser & { password_hash: string | null }) | undefined) || null;
+}
+
+export function upgradeUserToLocal(id: string, name: string, passwordHash: string): DbUser {
+  const db = getDatabase();
+  db.prepare("UPDATE users SET name = ?, provider = 'local', password_hash = ?, updated_at = ? WHERE id = ?")
+    .run(name, passwordHash, new Date().toISOString(), id);
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(id) as DbUser;
+}
+
+export function getLocalUserByEmail(email: string): (DbUser & { password_hash: string | null }) | null {
+  return (getDatabase().prepare("SELECT * FROM users WHERE email = ? AND provider = 'local'").get(email) as (DbUser & { password_hash: string | null }) | undefined) || null;
 }
 
 // User operations
@@ -104,7 +135,7 @@ export function upsertUser(user: {
     db.prepare(`
       INSERT INTO users (id, email, name, avatar, provider, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, user.email, user.name, user.avatar || null, user.provider || 'google', now, now);
+    `).run(id, user.email, user.name, user.avatar || null, user.provider || 'local', now, now);
 
     return (db.prepare('SELECT * FROM users WHERE id = ?').get(id) as DbUser);
   }

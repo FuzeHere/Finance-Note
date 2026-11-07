@@ -50,6 +50,13 @@ export function generateWeeklyReceipt(
     categories,
     'expense'
   );
+  const incomeCategories = calculateCategoryBreakdown(currentFlow.periodTransactions, categories, 'income');
+  const totalTransfers = currentFlow.periodTransactions.filter((tx) => tx.type === 'transfer').reduce((sum, tx) => sum + Math.abs(tx.amount || 0), 0);
+  const transactionDetails = currentFlow.periodTransactions.map((tx) => ({
+    id: tx.id, date: tx.date, type: tx.type, accountId: tx.accountId,
+    title: tx.note || categories.find((category) => category.id === tx.categoryId)?.name || (tx.type === 'transfer' ? 'Transfer antar akun' : 'Transaksi'),
+    amount: Math.abs(tx.amount || 0),
+  })).sort((a, b) => b.date.localeCompare(a.date));
 
   // Cari transaksi pengeluaran terbesar
   let largestExpense: ReceiptReport['largestExpense'] = undefined;
@@ -122,7 +129,10 @@ export function generateWeeklyReceipt(
     netCashFlow: currentFlow.netCashFlow,
     savingsRate,
     transactionCount: currentFlow.periodTransactions.length,
-    topCategories: topCategories.slice(0, 5),
+    topCategories,
+    incomeCategories,
+    totalTransfers,
+    transactionDetails,
     largestExpense,
     expenseComparison,
     incomeComparison,
@@ -162,6 +172,13 @@ export function generateMonthlyReceipt(
     categories,
     'expense'
   );
+  const incomeCategories = calculateCategoryBreakdown(currentFlow.periodTransactions, categories, 'income');
+  const totalTransfers = currentFlow.periodTransactions.filter((tx) => tx.type === 'transfer').reduce((sum, tx) => sum + Math.abs(tx.amount || 0), 0);
+  const transactionDetails = currentFlow.periodTransactions.map((tx) => ({
+    id: tx.id, date: tx.date, type: tx.type, accountId: tx.accountId,
+    title: tx.note || categories.find((category) => category.id === tx.categoryId)?.name || (tx.type === 'transfer' ? 'Transfer antar akun' : 'Transaksi'),
+    amount: Math.abs(tx.amount || 0),
+  })).sort((a, b) => b.date.localeCompare(a.date));
 
   // Transaksi terbesar
   let largestExpense: ReceiptReport['largestExpense'] = undefined;
@@ -241,7 +258,10 @@ export function generateMonthlyReceipt(
     netCashFlow: currentFlow.netCashFlow,
     savingsRate,
     transactionCount: currentFlow.periodTransactions.length,
-    topCategories: topCategories.slice(0, 5),
+    topCategories,
+    incomeCategories,
+    totalTransfers,
+    transactionDetails,
     largestExpense,
     expenseComparison,
     incomeComparison,
@@ -278,6 +298,13 @@ export function generateYearlyReceipt(
     categories,
     'expense'
   );
+  const incomeCategories = calculateCategoryBreakdown(currentFlow.periodTransactions, categories, 'income');
+  const totalTransfers = currentFlow.periodTransactions.filter((tx) => tx.type === 'transfer').reduce((sum, tx) => sum + Math.abs(tx.amount || 0), 0);
+  const transactionDetails = currentFlow.periodTransactions.map((tx) => ({
+    id: tx.id, date: tx.date, type: tx.type, accountId: tx.accountId,
+    title: tx.note || categories.find((category) => category.id === tx.categoryId)?.name || (tx.type === 'transfer' ? 'Transfer antar akun' : 'Transaksi'),
+    amount: Math.abs(tx.amount || 0),
+  })).sort((a, b) => b.date.localeCompare(a.date));
 
   let largestExpense: ReceiptReport['largestExpense'] = undefined;
   const expenseTxs = currentFlow.periodTransactions.filter(
@@ -376,7 +403,10 @@ export function generateYearlyReceipt(
     netCashFlow: currentFlow.netCashFlow,
     savingsRate,
     transactionCount: currentFlow.periodTransactions.length,
-    topCategories: topCategories.slice(0, 5),
+    topCategories,
+    incomeCategories,
+    totalTransfers,
+    transactionDetails,
     largestExpense,
     expenseComparison,
     incomeComparison,
