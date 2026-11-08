@@ -15,6 +15,7 @@ export function ProfileModal() {
     isProfileModalOpen,
     closeProfileModal,
     cloudSyncStatus,
+    cloudSyncMessage,
     lastSyncedAt,
     isCloudActive,
     syncToCloud,
@@ -133,7 +134,7 @@ export function ProfileModal() {
                 ) : cloudSyncStatus === 'error' ? (
                   <>
                     <AlertCircle className="w-3 h-3 text-rose-400" />
-                    <span className="text-rose-400">Gagal sinkron</span>
+                    <span className="text-rose-400">{cloudSyncMessage || 'Gagal sinkron'}</span>
                   </>
                 ) : (
                   <>

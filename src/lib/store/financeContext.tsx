@@ -18,6 +18,7 @@ interface FinanceContextType {
 
   // Cloud Sync & Auth
   cloudSyncStatus: CloudSyncStatus;
+  cloudSyncMessage: string | null;
   lastSyncedAt: string | null;
   isCloudActive: boolean;
   syncToCloud: () => Promise<boolean>;
@@ -107,6 +108,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   // Cloud Sync State
   const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatus>('idle');
+  const [cloudSyncMessage, setCloudSyncMessage] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(() =>
     getInitialState(STORAGE_KEYS.LAST_SYNC, null)
   );
@@ -158,6 +160,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         const json = await res.json();
         const syncTime = json.updatedAt || new Date().toISOString();
         setCloudSyncStatus('synced');
+        setCloudSyncMessage(null);
         setLastSyncedAt(syncTime);
         try {
           localStorage.setItem(STORAGE_KEYS.LAST_SYNC, JSON.stringify(syncTime));
@@ -166,11 +169,14 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         }
         return true;
       } else {
+        const error = await res.json().catch(() => null);
+        setCloudSyncMessage(error?.message || `Sinkronisasi gagal (HTTP ${res.status}).`);
         setCloudSyncStatus('error');
         return false;
       }
     } catch (err) {
       console.error('Cloud sync push error:', err);
+      setCloudSyncMessage('Server tidak dapat dijangkau. Periksa koneksi jaringan Anda.');
       setCloudSyncStatus('error');
       return false;
     }
@@ -258,18 +264,21 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
           const syncTime = json.data.updatedAt || new Date().toISOString();
           setCloudSyncStatus('synced');
+          setCloudSyncMessage(null);
           setLastSyncedAt(syncTime);
           return true;
         } else if (!json.hasData) {
           // Cloud kosong, simpan data lokal saat ini ke cloud
-          await pushToCloud(accounts, categories, transactions);
-          return true;
+          return pushToCloud(accounts, categories, transactions);
         }
       }
+      const error = await res.json().catch(() => null);
+      setCloudSyncMessage(error?.message || `Sinkronisasi gagal (HTTP ${res.status}).`);
       setCloudSyncStatus('error');
       return false;
     } catch (err) {
       console.error('Sync from cloud failed:', err);
+      setCloudSyncMessage('Server tidak dapat dijangkau. Periksa koneksi jaringan Anda.');
       setCloudSyncStatus('error');
       return false;
     }
@@ -298,6 +307,13 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
             setCurrentUser(accountUser);
             localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(accountUser));
+            setProfiles((existingProfiles) => {
+              const offlineProfiles = existingProfiles.map((profile) =>
+                profile.provider === 'local' ? { ...profile, provider: 'offline' as const } : profile
+              );
+              localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(offlineProfiles));
+              return offlineProfiles;
+            });
 
             // Pull cloud data
             const syncRes = await fetch('/api/sync');
@@ -317,6 +333,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
                 localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(cloudTxs));
 
                 setCloudSyncStatus('synced');
+                setCloudSyncMessage(null);
                 setLastSyncedAt(syncData.data.updatedAt);
               } else if (!syncData.hasData) {
                 // Initial backup of existing local data to cloud
@@ -325,7 +342,26 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
                 const currentTxs = getInitialState(STORAGE_KEYS.TRANSACTIONS, generateSeedTransactions());
                 pushToCloud(currentAccs, currentCats, currentTxs);
               }
+            } else {
+              const syncError = await syncRes.json().catch(() => null);
+              setCloudSyncMessage(syncError?.message || `Sinkronisasi gagal (HTTP ${syncRes.status}).`);
+              setCloudSyncStatus('error');
             }
+          }
+          if (meRes.ok && !meData.user && isMounted) {
+            // Older offline profiles also used provider="local"; they have no server session.
+            setCurrentUser((current) => {
+              const offlineUser = current.provider === 'local' ? { ...current, provider: 'offline' as const } : current;
+              localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(offlineUser));
+              return offlineUser;
+            });
+            setProfiles((existingProfiles) => {
+              const offlineProfiles = existingProfiles.map((profile) =>
+                profile.provider === 'local' ? { ...profile, provider: 'offline' as const } : profile
+              );
+              localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(offlineProfiles));
+              return offlineProfiles;
+            });
           }
         }
       } catch (err) {
@@ -387,7 +423,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         name: name.trim(),
         email: email?.trim() || undefined,
         isGuest: false,
-        provider: 'local',
+        provider: 'offline',
         createdAt: new Date().toISOString(),
       };
       const updatedProfiles = [...profiles, user];
@@ -601,6 +637,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         openProfileModal,
         closeProfileModal,
         cloudSyncStatus,
+        cloudSyncMessage,
         lastSyncedAt,
         isCloudActive,
         syncToCloud,

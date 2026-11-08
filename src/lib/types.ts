@@ -8,7 +8,7 @@ export interface UserProfile {
   email?: string;
   avatar?: string;
   isGuest?: boolean;
-  provider?: 'guest' | 'local' | 'google';
+  provider?: 'guest' | 'offline' | 'local' | 'google';
   createdAt: string;
 }
 

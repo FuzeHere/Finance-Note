@@ -1,10 +1,16 @@
 import { cookies } from 'next/headers';
+import type { NextRequest } from 'next/server';
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { getUserBySession, DbUser } from './db';
 
 export const SESSION_COOKIE_NAME = 'finance_note_session';
 const scrypt = promisify(scryptCallback);
+
+export function shouldUseSecureCookie(request: NextRequest): boolean {
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
+  return request.nextUrl.protocol === 'https:' || forwardedProto === 'https';
+}
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString('hex');
