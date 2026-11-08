@@ -248,6 +248,10 @@ describe('Financial Calculations Core Rules', () => {
     expect(report.savingsRate).toBe(76);
     expect(report.transactionCount).toBe(2);
     expect(report.largestExpense?.amount).toBe(1200000);
+    expect(report.incomeCategories[0].categoryName).toBe('Gaji');
+    expect(report.transactionDetails).toHaveLength(2);
+    expect(report.transactionDetails[0].title).toBe('Belanja Bulanan');
+    expect(report.totalTransfers).toBe(0);
     expect(report.insights.length).toBeGreaterThan(0);
   });
 });

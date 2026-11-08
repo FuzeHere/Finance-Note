@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -150,7 +151,7 @@ export function getUserById(id: string): DbUser | null {
 // Session operations
 export function createSession(userId: string, durationDays = 30): string {
   const db = getDatabase();
-  const token = `sess_${Date.now()}_${Math.random().toString(36).substring(2)}${Math.random().toString(36).substring(2)}`;
+  const token = randomBytes(32).toString('base64url');
   const now = new Date();
   const expiresAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000).toISOString();
 

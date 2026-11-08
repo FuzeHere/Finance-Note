@@ -1,4 +1,5 @@
 import {
+  CategoryTotal,
   Category,
   ReceiptReport,
   Transaction,
@@ -16,6 +17,47 @@ import {
   getWeekRange,
   getYearRange,
 } from './dates';
+
+function getReportBreakdown(transactions: Transaction[], categories: Category[]) {
+  const categoryById = new Map(categories.map((category) => [category.id, category]));
+  let largestExpenseTx: Transaction | undefined;
+  let totalTransfers = 0;
+
+  for (const tx of transactions) {
+    if (tx.type === 'expense' && (!largestExpenseTx || tx.amount > largestExpenseTx.amount)) {
+      largestExpenseTx = tx;
+    } else if (tx.type === 'transfer') {
+      totalTransfers += Math.abs(tx.amount || 0);
+    }
+  }
+
+  const transactionDetails = transactions.map((tx) => {
+    const category = tx.categoryId ? categoryById.get(tx.categoryId) : undefined;
+    return {
+      id: tx.id,
+      date: tx.date,
+      type: tx.type,
+      accountId: tx.accountId,
+      title: tx.note || category?.name || (tx.type === 'transfer' ? 'Transfer antar akun' : 'Transaksi'),
+      amount: Math.abs(tx.amount || 0),
+    };
+  }).sort((a, b) => b.date.localeCompare(a.date));
+
+  let largestExpense: ReceiptReport['largestExpense'];
+  if (largestExpenseTx) {
+    const category = largestExpenseTx.categoryId ? categoryById.get(largestExpenseTx.categoryId) : undefined;
+    largestExpense = {
+      title: largestExpenseTx.note || category?.name || 'Pengeluaran',
+      amount: Math.abs(largestExpenseTx.amount || 0),
+      date: formatDateIndo(largestExpenseTx.date),
+      categoryName: category?.name || 'Lainnya',
+    };
+  }
+
+  const topCategories: CategoryTotal[] = calculateCategoryBreakdown(transactions, categories, 'expense');
+  const incomeCategories: CategoryTotal[] = calculateCategoryBreakdown(transactions, categories, 'income');
+  return { topCategories, incomeCategories, totalTransfers, transactionDetails, largestExpense };
+}
 
 /**
  * Generator Struk Keuangan Mingguan (Weekly Receipt)
@@ -44,36 +86,8 @@ export function generateWeeklyReceipt(
     prevWeek.endStr
   );
 
-  // Breakdown kategori pengeluaran
-  const topCategories = calculateCategoryBreakdown(
-    currentFlow.periodTransactions,
-    categories,
-    'expense'
-  );
-  const incomeCategories = calculateCategoryBreakdown(currentFlow.periodTransactions, categories, 'income');
-  const totalTransfers = currentFlow.periodTransactions.filter((tx) => tx.type === 'transfer').reduce((sum, tx) => sum + Math.abs(tx.amount || 0), 0);
-  const transactionDetails = currentFlow.periodTransactions.map((tx) => ({
-    id: tx.id, date: tx.date, type: tx.type, accountId: tx.accountId,
-    title: tx.note || categories.find((category) => category.id === tx.categoryId)?.name || (tx.type === 'transfer' ? 'Transfer antar akun' : 'Transaksi'),
-    amount: Math.abs(tx.amount || 0),
-  })).sort((a, b) => b.date.localeCompare(a.date));
-
-  // Cari transaksi pengeluaran terbesar
-  let largestExpense: ReceiptReport['largestExpense'] = undefined;
-  const expenseTxs = currentFlow.periodTransactions.filter(
-    (tx) => tx.type === 'expense'
-  );
-  if (expenseTxs.length > 0) {
-    const sorted = [...expenseTxs].sort((a, b) => b.amount - a.amount);
-    const top = sorted[0];
-    const cat = categories.find((c) => c.id === top.categoryId);
-    largestExpense = {
-      title: top.note || cat?.name || 'Pengeluaran',
-      amount: top.amount,
-      date: formatDateIndo(top.date),
-      categoryName: cat?.name || 'Lainnya',
-    };
-  }
+  const { topCategories, incomeCategories, totalTransfers, transactionDetails, largestExpense } =
+    getReportBreakdown(currentFlow.periodTransactions, categories);
 
   // Perbandingan dengan minggu lalu
   const expenseComparison = calculatePeriodComparison(
@@ -166,36 +180,8 @@ export function generateMonthlyReceipt(
     prevMonth.endStr
   );
 
-  // Breakdown kategori
-  const topCategories = calculateCategoryBreakdown(
-    currentFlow.periodTransactions,
-    categories,
-    'expense'
-  );
-  const incomeCategories = calculateCategoryBreakdown(currentFlow.periodTransactions, categories, 'income');
-  const totalTransfers = currentFlow.periodTransactions.filter((tx) => tx.type === 'transfer').reduce((sum, tx) => sum + Math.abs(tx.amount || 0), 0);
-  const transactionDetails = currentFlow.periodTransactions.map((tx) => ({
-    id: tx.id, date: tx.date, type: tx.type, accountId: tx.accountId,
-    title: tx.note || categories.find((category) => category.id === tx.categoryId)?.name || (tx.type === 'transfer' ? 'Transfer antar akun' : 'Transaksi'),
-    amount: Math.abs(tx.amount || 0),
-  })).sort((a, b) => b.date.localeCompare(a.date));
-
-  // Transaksi terbesar
-  let largestExpense: ReceiptReport['largestExpense'] = undefined;
-  const expenseTxs = currentFlow.periodTransactions.filter(
-    (tx) => tx.type === 'expense'
-  );
-  if (expenseTxs.length > 0) {
-    const sorted = [...expenseTxs].sort((a, b) => b.amount - a.amount);
-    const top = sorted[0];
-    const cat = categories.find((c) => c.id === top.categoryId);
-    largestExpense = {
-      title: top.note || cat?.name || 'Pengeluaran',
-      amount: top.amount,
-      date: formatDateIndo(top.date),
-      categoryName: cat?.name || 'Lainnya',
-    };
-  }
+  const { topCategories, incomeCategories, totalTransfers, transactionDetails, largestExpense } =
+    getReportBreakdown(currentFlow.periodTransactions, categories);
 
   // Perbandingan
   const expenseComparison = calculatePeriodComparison(
@@ -293,34 +279,8 @@ export function generateYearlyReceipt(
     prevYear.endStr
   );
 
-  const topCategories = calculateCategoryBreakdown(
-    currentFlow.periodTransactions,
-    categories,
-    'expense'
-  );
-  const incomeCategories = calculateCategoryBreakdown(currentFlow.periodTransactions, categories, 'income');
-  const totalTransfers = currentFlow.periodTransactions.filter((tx) => tx.type === 'transfer').reduce((sum, tx) => sum + Math.abs(tx.amount || 0), 0);
-  const transactionDetails = currentFlow.periodTransactions.map((tx) => ({
-    id: tx.id, date: tx.date, type: tx.type, accountId: tx.accountId,
-    title: tx.note || categories.find((category) => category.id === tx.categoryId)?.name || (tx.type === 'transfer' ? 'Transfer antar akun' : 'Transaksi'),
-    amount: Math.abs(tx.amount || 0),
-  })).sort((a, b) => b.date.localeCompare(a.date));
-
-  let largestExpense: ReceiptReport['largestExpense'] = undefined;
-  const expenseTxs = currentFlow.periodTransactions.filter(
-    (tx) => tx.type === 'expense'
-  );
-  if (expenseTxs.length > 0) {
-    const sorted = [...expenseTxs].sort((a, b) => b.amount - a.amount);
-    const top = sorted[0];
-    const cat = categories.find((c) => c.id === top.categoryId);
-    largestExpense = {
-      title: top.note || cat?.name || 'Pengeluaran Terbesar',
-      amount: top.amount,
-      date: formatDateIndo(top.date),
-      categoryName: cat?.name || 'Lainnya',
-    };
-  }
+  const { topCategories, incomeCategories, totalTransfers, transactionDetails, largestExpense } =
+    getReportBreakdown(currentFlow.periodTransactions, categories);
 
   const expenseComparison = calculatePeriodComparison(
     currentFlow.totalExpense,
@@ -343,8 +303,7 @@ export function generateYearlyReceipt(
   }
 
   for (const tx of currentFlow.periodTransactions) {
-    const txDate = new Date(tx.date);
-    const month = txDate.getMonth();
+    const month = Number(tx.date.slice(5, 7)) - 1;
     const amt = Math.abs(tx.amount || 0);
     if (tx.type === 'income') {
       monthlyStats[month].income += amt;
@@ -380,7 +339,9 @@ export function generateYearlyReceipt(
   if (currentFlow.periodTransactions.length === 0) {
     insights.push('Belum ada transaksi di tahun ini.');
   } else {
-    const avgMonthlyExpense = Math.round(currentFlow.totalExpense / 12);
+    const now = new Date();
+    const monthsInPeriod = currentYear.start.getFullYear() === now.getFullYear() ? now.getMonth() + 1 : 12;
+    const avgMonthlyExpense = Math.round(currentFlow.totalExpense / monthsInPeriod);
     insights.push(`Rata-rata pengeluaran per bulan: ${formatIDR(avgMonthlyExpense)}.`);
     if (maxExpense > 0) {
       insights.push(`Bulan dengan pengeluaran tertinggi: ${monthNames[highestExpenseMonthIndex]} (${formatIDR(maxExpense)}).`);

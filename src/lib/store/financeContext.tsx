@@ -23,7 +23,6 @@ interface FinanceContextType {
   isCloudActive: boolean;
   syncToCloud: () => Promise<boolean>;
   syncFromCloud: () => Promise<boolean>;
-  loginWithLocalAccount: (email: string, password: string, registerName?: string) => Promise<string | null>;
   logoutFromCloud: () => Promise<void>;
 
   // Akun / Dompet
@@ -379,23 +378,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     };
   }, [pushToCloud]);
 
-  const loginWithLocalAccount = useCallback(async (email: string, password: string, registerName?: string): Promise<string | null> => {
-    try {
-      const response = await fetch(registerName ? '/api/auth/register' : '/api/auth/login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(registerName ? { name: registerName, email, password } : { email, password }),
-      });
-      const result = await response.json();
-      if (!response.ok) return result.message || 'Tidak dapat masuk.';
-      const user: UserProfile = { ...result.user, isGuest: false, provider: 'local' };
-      setCurrentUser(user);
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
-      await pushToCloud(accounts, categories, transactions);
-      setIsProfileModalOpen(false);
-      return null;
-    } catch { return 'Koneksi bermasalah. Silakan coba lagi.'; }
-  }, [accounts, categories, transactions, pushToCloud]);
-
   const logoutFromCloud = useCallback(async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
@@ -642,7 +624,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         isCloudActive,
         syncToCloud,
         syncFromCloud,
-        loginWithLocalAccount,
         logoutFromCloud,
         accounts: accountsWithBalance,
         categories,

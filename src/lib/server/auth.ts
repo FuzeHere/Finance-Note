@@ -19,8 +19,8 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  if (!/^[a-f0-9]{32}:[a-f0-9]{128}$/i.test(stored)) return false;
   const [salt, savedHex] = stored.split(':');
-  if (!salt || !savedHex) return false;
   const saved = Buffer.from(savedHex, 'hex');
   const candidate = await scrypt(password, salt, saved.length) as Buffer;
   return saved.length === candidate.length && timingSafeEqual(saved, candidate);

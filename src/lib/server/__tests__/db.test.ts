@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { upsertUser, createSession, getUserBySession, deleteSession, saveUserFinanceData, getUserFinanceData } from '../db';
+import { describe, it, expect } from 'vitest';
+import { upsertUser, createLocalUser, getLocalUserByEmail, upgradeUserToLocal, createSession, getUserBySession, deleteSession, saveUserFinanceData, getUserFinanceData } from '../db';
 
 describe('Server SQLite Cloud Persistence', () => {
   const testEmail = `test_${Date.now()}@example.com`;
@@ -9,7 +9,7 @@ describe('Server SQLite Cloud Persistence', () => {
     const user = upsertUser({
       email: testEmail,
       name: testName,
-      provider: 'google',
+      provider: 'local',
     });
 
     expect(user).toBeDefined();
@@ -19,6 +19,7 @@ describe('Server SQLite Cloud Persistence', () => {
     const token = createSession(user.id);
     expect(token).toBeDefined();
     expect(typeof token).toBe('string');
+    expect(token).toMatch(/^[a-zA-Z0-9_-]{43}$/);
 
     const sessionUser = getUserBySession(token);
     expect(sessionUser).not.toBeNull();
@@ -28,6 +29,19 @@ describe('Server SQLite Cloud Persistence', () => {
     deleteSession(token);
     const deletedSessionUser = getUserBySession(token);
     expect(deletedSessionUser).toBeNull();
+  });
+
+  it('stores local account password hashes and upgrades legacy users without changing their ID', () => {
+    const email = `local_${Date.now()}@example.com`;
+    const passwordHash = 'a'.repeat(32) + ':' + 'b'.repeat(128);
+    const user = createLocalUser(email, 'Local Tester', passwordHash);
+
+    expect(user.provider).toBe('local');
+    expect(getLocalUserByEmail(email)?.password_hash).toBe(passwordHash);
+
+    const upgraded = upgradeUserToLocal(user.id, 'Updated Tester', 'c'.repeat(32) + ':' + 'd'.repeat(128));
+    expect(upgraded.id).toBe(user.id);
+    expect(upgraded.name).toBe('Updated Tester');
   });
 
   it('berhasil menyimpan dan mengambil data keuangan cloud per user', () => {
