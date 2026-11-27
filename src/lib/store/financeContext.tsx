@@ -47,6 +47,8 @@ interface FinanceContextType {
   
   // Kategori & Backup
   addCategory: (category: Omit<Category, 'id'>) => Category;
+  updateCategory: (category: Category) => void;
+  deleteCategory: (id: string) => { success: boolean; message?: string };
   exportBackupJSON: () => string;
   importBackupJSON: (jsonString: string) => boolean;
 
@@ -521,10 +523,36 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const addCategory = useCallback((catData: Omit<Category, 'id'>): Category => {
     const newCat: Category = {
       ...catData,
+      name: catData.name.trim(),
       id: `cat-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     };
     saveCategories([...categories, newCat]);
     return newCat;
+  }, [categories, saveCategories]);
+
+  const updateCategory = useCallback((updatedCat: Category) => {
+    const trimmedName = updatedCat.name.trim();
+    if (!trimmedName) return;
+    const updated = categories.map((c) =>
+      c.id === updatedCat.id ? { ...updatedCat, name: trimmedName } : c
+    );
+    saveCategories(updated);
+  }, [categories, saveCategories]);
+
+  const deleteCategory = useCallback((id: string): { success: boolean; message?: string } => {
+    const target = categories.find((c) => c.id === id);
+    if (!target) return { success: false, message: 'Kategori tidak ditemukan.' };
+
+    const sameTypeCount = categories.filter((c) => c.type === target.type).length;
+    if (sameTypeCount <= 1) {
+      return {
+        success: false,
+        message: 'Minimal harus ada satu kategori aktif untuk tipe ini.',
+      };
+    }
+
+    saveCategories(categories.filter((c) => c.id !== id));
+    return { success: true };
   }, [categories, saveCategories]);
 
   const resetAllData = useCallback(() => {
@@ -640,6 +668,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         deleteAccount,
         hasLinkedTransactions,
         addCategory,
+        updateCategory,
+        deleteCategory,
         exportBackupJSON,
         importBackupJSON,
         resetAllData,

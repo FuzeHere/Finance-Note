@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Check, ArrowRight, Calendar, AlertCircle, AlertTriangle } from 'lucide-react';
+import { X, Check, ArrowRight, Calendar, AlertCircle, AlertTriangle, Settings2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useFinance } from '../../lib/store/financeContext';
 import { TransactionType } from '../../lib/types';
 import { formatIDR, parseIDRInput } from '../../lib/finance/currency';
 import { getTodayDateString } from '../../lib/finance/dates';
+import { CategoryManagerModal } from './CategoryManagerModal';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -60,6 +61,7 @@ function TransactionModalForm({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
 
   const handleTypeChange = (newType: TransactionType) => {
     setType(newType);
@@ -74,6 +76,9 @@ function TransactionModalForm({
 
   const currentNumericAmount = parseIDRInput(rawAmount);
   const availableCategories = categories.filter((c) => c.type === type);
+  const effectiveCategoryId = availableCategories.some((c) => c.id === selectedCategoryId)
+    ? selectedCategoryId
+    : (availableCategories[0]?.id || '');
 
   const currentAccount = accounts.find((a) => a.id === selectedAccountId);
   const availableBalance = currentAccount?.currentBalance ?? currentAccount?.initialBalance ?? 0;
@@ -107,7 +112,7 @@ function TransactionModalForm({
         return;
       }
     } else {
-      if (!selectedCategoryId) {
+      if (!effectiveCategoryId) {
         setErrorMessage('Pilih kategori transaksi');
         return;
       }
@@ -123,7 +128,7 @@ function TransactionModalForm({
           amount: currentNumericAmount,
           accountId: selectedAccountId,
           toAccountId: type === 'transfer' ? selectedToAccountId : undefined,
-          categoryId: type !== 'transfer' ? selectedCategoryId : undefined,
+          categoryId: type !== 'transfer' ? effectiveCategoryId : undefined,
           date,
           note: note.trim() || undefined,
         });
@@ -133,7 +138,7 @@ function TransactionModalForm({
           amount: currentNumericAmount,
           accountId: selectedAccountId,
           toAccountId: type === 'transfer' ? selectedToAccountId : undefined,
-          categoryId: type !== 'transfer' ? selectedCategoryId : undefined,
+          categoryId: type !== 'transfer' ? effectiveCategoryId : undefined,
           date,
           note: note.trim() || undefined,
         });
@@ -258,15 +263,24 @@ function TransactionModalForm({
         </div>
 
         {/* Kategori */}
-        {/* Kategori */}
         {type !== 'transfer' && (
           <div>
-            <label className="text-xs font-semibold text-slate-300 block mb-2">
-              Kategori
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-slate-300">
+                Kategori
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsCategoryManagerOpen(true)}
+                className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+                <span>Kelola</span>
+              </button>
+            </div>
             <div className="grid grid-cols-4 gap-2 max-h-36 overflow-y-auto no-scrollbar p-1">
               {availableCategories.map((cat) => {
-                const isSelected = selectedCategoryId === cat.id;
+                const isSelected = effectiveCategoryId === cat.id;
                 return (
                   <button
                     key={cat.id}
@@ -406,6 +420,12 @@ function TransactionModalForm({
           )}
         </button>
       </form>
+
+      <CategoryManagerModal
+        isOpen={isCategoryManagerOpen}
+        onClose={() => setIsCategoryManagerOpen(false)}
+        initialType={type === 'income' ? 'income' : 'expense'}
+      />
     </div>
   );
 }

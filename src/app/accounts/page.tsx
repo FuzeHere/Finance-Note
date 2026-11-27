@@ -15,14 +15,17 @@ import {
   X,
   Trash2,
   AlertCircle,
+  Tags,
 } from 'lucide-react';
 import { useFinance } from '../../lib/store/financeContext';
 import { formatIDR, parseIDRInput } from '../../lib/finance/currency';
 import { AccountType } from '../../lib/types';
+import { CategoryManagerModal } from '../../components/finance/CategoryManagerModal';
 
 export default function AccountsPage() {
   const {
     accounts,
+    categories,
     totalBalance,
     addAccount,
     deleteAccount,
@@ -40,6 +43,7 @@ export default function AccountsPage() {
   const [rawInitialBalance, setRawInitialBalance] = useState('');
   const [toastMessage, setToastMessage] = useState('');
   const [accountToDeleteId, setAccountToDeleteId] = useState<string | null>(null);
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
 
   const getAccountIcon = (type: AccountType) => {
     switch (type) {
@@ -218,6 +222,27 @@ export default function AccountsPage() {
         })}
       </div>
 
+      {/* Kelola Kategori Transaksi */}
+      <div className="bg-slate-800/60 border border-slate-700/50 p-4 rounded-2xl flex items-center justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 rounded-xl bg-slate-900 border border-slate-700/60 flex items-center justify-center shrink-0">
+            <Tags className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-white">Kategori Transaksi</p>
+            <p className="text-[11px] text-slate-400">
+              {categories.filter((c) => c.type === 'expense').length} Pengeluaran • {categories.filter((c) => c.type === 'income').length} Pemasukan
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => setIsCategoryManagerOpen(true)}
+          className="py-2 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 text-xs font-bold border border-emerald-500/30 transition-colors cursor-pointer shrink-0"
+        >
+          Kelola
+        </button>
+      </div>
+
       {/* Manajemen Cadangan Data (Backup / Restore / Reset) */}
       <div className="mt-8 pt-4 border-t border-slate-800">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
@@ -326,6 +351,11 @@ export default function AccountsPage() {
           </div>
         </div>
       )}
+
+      <CategoryManagerModal
+        isOpen={isCategoryManagerOpen}
+        onClose={() => setIsCategoryManagerOpen(false)}
+      />
 
       {/* Modal Konfirmasi Hapus Akun */}
       {accountToDeleteId && (
