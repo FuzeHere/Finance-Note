@@ -5,7 +5,12 @@ const config: CapacitorConfig = {
   appName: 'DompetKu',
   webDir: 'out',
   server: {
-    androidScheme: 'https',
+    androidScheme: 'http',
+  },
+  plugins: {
+    CapacitorHttp: {
+      enabled: true,
+    },
   },
 };
 

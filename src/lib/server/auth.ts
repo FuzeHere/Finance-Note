@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import type { NextRequest } from 'next/server';
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
@@ -28,7 +28,14 @@ export async function verifyPassword(password: string, stored: string): Promise<
 
 export async function getCurrentUser(): Promise<DbUser | null> {
   const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  let sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+
+  if (!sessionToken) {
+    const authHeader = (await headers()).get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      sessionToken = authHeader.slice(7).trim();
+    }
+  }
 
   if (!sessionToken) {
     return null;

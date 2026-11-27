@@ -21,6 +21,7 @@ export function ProfileModal() {
     hasPendingSync,
     serverUrl,
     setServerUrl,
+    testServerConnection,
     syncToCloud,
     logoutFromCloud,
   } = useFinance();
@@ -30,7 +31,8 @@ export function ProfileModal() {
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [serverInput, setServerInput] = useState(serverUrl);
-  const [serverSaved, setServerSaved] = useState(false);
+  const [serverTestResult, setServerTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [isTestingServer, setIsTestingServer] = useState(false);
 
   if (!isProfileModalOpen) return null;
 
@@ -185,26 +187,35 @@ export function ProfileModal() {
           </label>
           <div className="flex gap-1.5">
             <input
-              type="url"
+              type="text"
               value={serverInput}
               onChange={(e) => {
                 setServerInput(e.target.value);
-                setServerSaved(false);
+                setServerTestResult(null);
               }}
-              placeholder="https://domain-vps-anda.com"
+              placeholder="http://192.168.1.10:3100"
               className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-[11px] text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
             />
             <button
               type="button"
-              onClick={() => {
+              disabled={isTestingServer}
+              onClick={async () => {
                 setServerUrl(serverInput);
-                setServerSaved(true);
+                setIsTestingServer(true);
+                const result = await testServerConnection(serverInput);
+                setServerTestResult(result);
+                setIsTestingServer(false);
               }}
-              className="px-2.5 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-[11px] font-semibold text-white cursor-pointer"
+              className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] font-semibold text-emerald-300 cursor-pointer disabled:opacity-50"
             >
-              {serverSaved ? 'Tersimpan' : 'Simpan'}
+              {isTestingServer ? 'Tes...' : 'Simpan & Tes'}
             </button>
           </div>
+          {serverTestResult && (
+            <p className={`text-[10px] ${serverTestResult.ok ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {serverTestResult.message}
+            </p>
+          )}
         </div>
 
         {/* Daftar Profil Lokal yang Tersimpan (jika ada) */}

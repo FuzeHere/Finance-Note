@@ -24,6 +24,7 @@ interface FinanceContextType {
   hasPendingSync: boolean;
   serverUrl: string;
   setServerUrl: (url: string) => void;
+  testServerConnection: (url?: string) => Promise<{ ok: boolean; message: string }>;
   syncToCloud: () => Promise<boolean>;
   syncFromCloud: () => Promise<boolean>;
   logoutFromCloud: () => Promise<void>;
@@ -80,10 +81,46 @@ const STORAGE_KEYS = {
   LAST_SYNC: 'pk_last_cloud_sync_v1',
   PENDING_SYNC: 'pk_pending_sync_v1',
   SERVER_URL: 'pk_server_url_v1',
+  AUTH_TOKEN: 'pk_auth_token_v1',
 };
 
-function normalizeServerUrl(url: string): string {
-  return url.trim().replace(/\/+$/, '');
+export function normalizeServerUrl(url: string): string {
+  const trimmed = url.trim().replace(/\/+$/, '');
+  if (!trimmed) return '';
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return `http://${trimmed}`;
+  }
+  return trimmed;
+}
+
+export function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token: string | null) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (token) {
+      localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function getAuthHeaders(extra?: Record<string, string>): Record<string, string> {
+  const token = getAuthToken();
+  return {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...extra,
+  };
 }
 
 export function getApiBaseUrl(): string {
@@ -175,6 +212,25 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const testServerConnection = useCallback(async (url?: string): Promise<{ ok: boolean; message: string }> => {
+    const targetBase = url !== undefined ? normalizeServerUrl(url) : getApiBaseUrl();
+    if (!targetBase) {
+      return { ok: false, message: 'Masukkan URL server terlebih dahulu.' };
+    }
+    try {
+      const res = await fetch(`${targetBase}/api/auth/me`, {
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        return { ok: true, message: `Terhubung ke ${targetBase}` };
+      }
+      return { ok: false, message: `Server merespons HTTP ${res.status}` };
+    } catch {
+      return { ok: false, message: `Tidak dapat menjangkau ${targetBase}. Pastikan server aktif & 1 jaringan/Tailscale.` };
+    }
+  }, []);
+
   const markPendingSync = useCallback((pending: boolean) => {
     setHasPendingSync(pending);
     try {
@@ -203,7 +259,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch(`${base}/api/sync`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           accounts: targetAccounts,
           categories: targetCategories,
@@ -314,7 +370,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     try {
       setCloudSyncStatus('syncing');
       const base = getApiBaseUrl();
-      const res = await fetch(`${base}/api/sync`, { credentials: 'include' });
+      const res = await fetch(`${base}/api/sync`, { credentials: 'include', headers: getAuthHeaders() });
       if (res.ok) {
         const json = await res.json();
         if (json.hasData && json.data) {
@@ -366,7 +422,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       try {
         // Cek sesi login saat ini
         const base = getApiBaseUrl();
-        const meRes = await fetch(`${base}/api/auth/me`, { credentials: 'include' });
+        const meRes = await fetch(`${base}/api/auth/me`, { credentials: 'include', headers: getAuthHeaders() });
         if (meRes.ok) {
           const meData = await meRes.json();
           if (meData.user && isMounted) {
@@ -501,10 +557,11 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const logoutFromCloud = useCallback(async () => {
     try {
       const base = getApiBaseUrl();
-      await fetch(`${base}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+      await fetch(`${base}/api/auth/logout`, { method: 'POST', credentials: 'include', headers: getAuthHeaders() });
     } catch {
       // ignore
     }
+    setAuthToken(null);
     setCurrentUser(DEFAULT_GUEST_USER);
     setCloudSyncStatus('idle');
     localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(DEFAULT_GUEST_USER));
@@ -772,6 +829,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         hasPendingSync,
         serverUrl,
         setServerUrl,
+        testServerConnection,
         syncToCloud,
         syncFromCloud,
         logoutFromCloud,

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { getApiBaseUrl } from '@/lib/store/financeContext';
+import { getApiBaseUrl, setAuthToken } from '@/lib/store/financeContext';
 import { FormEvent, useState } from 'react';
 
 export default function LoginPage() {
@@ -15,6 +15,7 @@ export default function LoginPage() {
       const response = await fetch(`${getApiBaseUrl()}/api/auth/login`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
       const result = await response.json();
       if (!response.ok) { setError(result.message || 'Gagal masuk.'); return; }
+      if (result.token) setAuthToken(result.token);
       // A full reload initializes the finance context from the newly created server session.
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign('/');

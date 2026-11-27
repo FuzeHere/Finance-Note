@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { getApiBaseUrl } from '@/lib/store/financeContext';
+import { getApiBaseUrl, setAuthToken } from '@/lib/store/financeContext';
 import { FormEvent, useState } from 'react';
 
 export default function RegisterPage() {
@@ -13,6 +13,7 @@ export default function RegisterPage() {
       const response = await fetch(`${getApiBaseUrl()}/api/auth/register`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password }) });
       const result = await response.json();
       if (!response.ok) { setError(result.message || 'Pendaftaran gagal.'); return; }
+      if (result.token) setAuthToken(result.token);
       // A full reload initializes the finance context from the newly created server session.
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign('/');
