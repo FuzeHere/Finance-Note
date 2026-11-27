@@ -18,6 +18,9 @@ export function ProfileModal() {
     cloudSyncMessage,
     lastSyncedAt,
     isCloudActive,
+    hasPendingSync,
+    serverUrl,
+    setServerUrl,
     syncToCloud,
     logoutFromCloud,
   } = useFinance();
@@ -26,6 +29,8 @@ export function ProfileModal() {
   const [email, setEmail] = useState('');
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [serverInput, setServerInput] = useState(serverUrl);
+  const [serverSaved, setServerSaved] = useState(false);
 
   if (!isProfileModalOpen) return null;
 
@@ -131,6 +136,11 @@ export function ProfileModal() {
                     <RefreshCw className="w-3 h-3 text-sky-400 animate-spin" />
                     <span className="text-sky-300">Menyinkronkan data...</span>
                   </>
+                ) : cloudSyncStatus === 'offline' || hasPendingSync ? (
+                  <>
+                    <AlertCircle className="w-3 h-3 text-amber-400" />
+                    <span className="text-amber-300">Menunggu internet untuk upload</span>
+                  </>
                 ) : cloudSyncStatus === 'error' ? (
                   <>
                     <AlertCircle className="w-3 h-3 text-rose-400" />
@@ -167,6 +177,35 @@ export function ProfileModal() {
             </div>
           </div>
         )}
+
+        {/* Konfigurasi URL Server VPS (untuk Aplikasi Android / Offline-First) */}
+        <div className="space-y-1.5 pt-2 border-t border-slate-800">
+          <label className="text-[11px] font-semibold text-slate-400 block">
+            URL Server VPS (Opsional untuk APK)
+          </label>
+          <div className="flex gap-1.5">
+            <input
+              type="url"
+              value={serverInput}
+              onChange={(e) => {
+                setServerInput(e.target.value);
+                setServerSaved(false);
+              }}
+              placeholder="https://domain-vps-anda.com"
+              className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-[11px] text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setServerUrl(serverInput);
+                setServerSaved(true);
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-[11px] font-semibold text-white cursor-pointer"
+            >
+              {serverSaved ? 'Tersimpan' : 'Simpan'}
+            </button>
+          </div>
+        </div>
 
         {/* Daftar Profil Lokal yang Tersimpan (jika ada) */}
         {profiles.length > 1 && !isCreatingNew && (

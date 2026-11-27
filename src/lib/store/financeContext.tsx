@@ -21,6 +21,9 @@ interface FinanceContextType {
   cloudSyncMessage: string | null;
   lastSyncedAt: string | null;
   isCloudActive: boolean;
+  hasPendingSync: boolean;
+  serverUrl: string;
+  setServerUrl: (url: string) => void;
   syncToCloud: () => Promise<boolean>;
   syncFromCloud: () => Promise<boolean>;
   logoutFromCloud: () => Promise<void>;
@@ -75,7 +78,24 @@ const STORAGE_KEYS = {
   PROFILES: 'pk_profiles_v1',
   CURRENT_USER: 'pk_current_user_v1',
   LAST_SYNC: 'pk_last_cloud_sync_v1',
+  PENDING_SYNC: 'pk_pending_sync_v1',
+  SERVER_URL: 'pk_server_url_v1',
 };
+
+function normalizeServerUrl(url: string): string {
+  return url.trim().replace(/\/+$/, '');
+}
+
+export function getApiBaseUrl(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const saved = localStorage.getItem(STORAGE_KEYS.SERVER_URL);
+    if (saved) return normalizeServerUrl(JSON.parse(saved));
+  } catch {
+    // ignore
+  }
+  return normalizeServerUrl(process.env.NEXT_PUBLIC_API_URL || '');
+}
 
 const DEFAULT_GUEST_USER: UserProfile = {
   id: 'usr-guest',
@@ -113,6 +133,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(() =>
     getInitialState(STORAGE_KEYS.LAST_SYNC, null)
   );
+  const [hasPendingSync, setHasPendingSync] = useState<boolean>(() =>
+    getInitialState(STORAGE_KEYS.PENDING_SYNC, false)
+  );
+  const [serverUrl, setServerUrlState] = useState<string>(() =>
+    getInitialState(STORAGE_KEYS.SERVER_URL, process.env.NEXT_PUBLIC_API_URL || '')
+  );
 
   // Core Data States
   const [accounts, setAccounts] = useState<Account[]>(() =>
@@ -139,16 +165,44 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isCloudActive = currentUser.provider === 'local' || currentUser.provider === 'google';
 
+  const setServerUrl = useCallback((url: string) => {
+    const normalized = normalizeServerUrl(url);
+    setServerUrlState(normalized);
+    try {
+      localStorage.setItem(STORAGE_KEYS.SERVER_URL, JSON.stringify(normalized));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const markPendingSync = useCallback((pending: boolean) => {
+    setHasPendingSync(pending);
+    try {
+      localStorage.setItem(STORAGE_KEYS.PENDING_SYNC, JSON.stringify(pending));
+    } catch {
+      // ignore
+    }
+  }, []);
+
   // Cloud Sync Worker function
   const pushToCloud = useCallback(async (
     targetAccounts: Account[],
     targetCategories: Category[],
     targetTransactions: Transaction[]
   ): Promise<boolean> => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      markPendingSync(true);
+      setCloudSyncStatus('offline');
+      setCloudSyncMessage('Sedang offline. Perubahan tersimpan lokal dan akan otomatis dikirim saat online.');
+      return false;
+    }
+
     try {
       setCloudSyncStatus('syncing');
-      const res = await fetch('/api/sync', {
+      const base = getApiBaseUrl();
+      const res = await fetch(`${base}/api/sync`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           accounts: targetAccounts,
@@ -160,6 +214,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const json = await res.json();
         const syncTime = json.updatedAt || new Date().toISOString();
+        markPendingSync(false);
         setCloudSyncStatus('synced');
         setCloudSyncMessage(null);
         setLastSyncedAt(syncTime);
@@ -171,17 +226,24 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         return true;
       } else {
         const error = await res.json().catch(() => null);
+        markPendingSync(true);
         setCloudSyncMessage(error?.message || `Sinkronisasi gagal (HTTP ${res.status}).`);
         setCloudSyncStatus('error');
         return false;
       }
     } catch (err) {
       console.error('Cloud sync push error:', err);
-      setCloudSyncMessage('Server tidak dapat dijangkau. Periksa koneksi jaringan Anda.');
-      setCloudSyncStatus('error');
+      markPendingSync(true);
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      setCloudSyncMessage(
+        isOffline
+          ? 'Sedang offline. Perubahan akan otomatis dikirim saat online.'
+          : 'Server tidak dapat dijangkau. Akan dicoba ulang otomatis saat terhubung.'
+      );
+      setCloudSyncStatus(isOffline ? 'offline' : 'error');
       return false;
     }
-  }, []);
+  }, [markPendingSync]);
 
   // Debounced auto-sync when changes occur
   const triggerAutoSync = useCallback((
@@ -191,6 +253,14 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   ) => {
     if (currentUser.provider !== 'local' && currentUser.provider !== 'google') return;
 
+    markPendingSync(true);
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setCloudSyncStatus('offline');
+      setCloudSyncMessage('Offline: perubahan disimpan lokal & menunggu koneksi.');
+      return;
+    }
+
     if (syncTimeoutRef.current) {
       clearTimeout(syncTimeoutRef.current);
     }
@@ -199,7 +269,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     syncTimeoutRef.current = setTimeout(() => {
       pushToCloud(newAccounts, newCategories, newTransactions);
     }, 800);
-  }, [currentUser.provider, pushToCloud]);
+  }, [currentUser.provider, markPendingSync, pushToCloud]);
 
   // Simpan akun ke storage & sync cloud
   const saveAccounts = useCallback((newAccounts: Account[]) => {
@@ -243,7 +313,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const syncFromCloud = useCallback(async (): Promise<boolean> => {
     try {
       setCloudSyncStatus('syncing');
-      const res = await fetch('/api/sync');
+      const base = getApiBaseUrl();
+      const res = await fetch(`${base}/api/sync`, { credentials: 'include' });
       if (res.ok) {
         const json = await res.json();
         if (json.hasData && json.data) {
@@ -263,6 +334,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
             // ignore
           }
 
+          markPendingSync(false);
           const syncTime = json.data.updatedAt || new Date().toISOString();
           setCloudSyncStatus('synced');
           setCloudSyncMessage(null);
@@ -279,11 +351,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       return false;
     } catch (err) {
       console.error('Sync from cloud failed:', err);
-      setCloudSyncMessage('Server tidak dapat dijangkau. Periksa koneksi jaringan Anda.');
-      setCloudSyncStatus('error');
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      setCloudSyncMessage(isOffline ? 'Sedang offline.' : 'Server tidak dapat dijangkau. Periksa koneksi jaringan Anda.');
+      setCloudSyncStatus(isOffline ? 'offline' : 'error');
       return false;
     }
-  }, [accounts, categories, transactions, pushToCloud]);
+  }, [accounts, categories, transactions, markPendingSync, pushToCloud]);
 
   // Check auth & sync on startup
   useEffect(() => {
@@ -292,7 +365,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     async function initializeAuthAndCloud() {
       try {
         // Cek sesi login saat ini
-        const meRes = await fetch('/api/auth/me');
+        const base = getApiBaseUrl();
+        const meRes = await fetch(`${base}/api/auth/me`, { credentials: 'include' });
         if (meRes.ok) {
           const meData = await meRes.json();
           if (meData.user && isMounted) {
@@ -316,37 +390,46 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
               return offlineProfiles;
             });
 
-            // Pull cloud data
-            const syncRes = await fetch('/api/sync');
-            if (syncRes.ok) {
-              const syncData = await syncRes.json();
-              if (syncData.hasData && syncData.data) {
-                const cloudAccs = syncData.data.accounts || DEFAULT_ACCOUNTS;
-                const cloudCats = syncData.data.categories || DEFAULT_CATEGORIES;
-                const cloudTxs = syncData.data.transactions || [];
-
-                setAccounts(cloudAccs);
-                setCategories(cloudCats);
-                setTransactions(cloudTxs);
-
-                localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(cloudAccs));
-                localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(cloudCats));
-                localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(cloudTxs));
-
-                setCloudSyncStatus('synced');
-                setCloudSyncMessage(null);
-                setLastSyncedAt(syncData.data.updatedAt);
-              } else if (!syncData.hasData) {
-                // Initial backup of existing local data to cloud
-                const currentAccs = getInitialState(STORAGE_KEYS.ACCOUNTS, DEFAULT_ACCOUNTS);
-                const currentCats = getInitialState(STORAGE_KEYS.CATEGORIES, DEFAULT_CATEGORIES);
-                const currentTxs = getInitialState(STORAGE_KEYS.TRANSACTIONS, generateSeedTransactions());
-                pushToCloud(currentAccs, currentCats, currentTxs);
-              }
+            const pendingLocal = getInitialState(STORAGE_KEYS.PENDING_SYNC, false);
+            if (pendingLocal) {
+              // Perubahan offline belum terupload: kirim ke server dulu agar tidak tertimpa data lama server
+              const currentAccs = getInitialState(STORAGE_KEYS.ACCOUNTS, DEFAULT_ACCOUNTS);
+              const currentCats = getInitialState(STORAGE_KEYS.CATEGORIES, DEFAULT_CATEGORIES);
+              const currentTxs = getInitialState(STORAGE_KEYS.TRANSACTIONS, generateSeedTransactions());
+              await pushToCloud(currentAccs, currentCats, currentTxs);
             } else {
-              const syncError = await syncRes.json().catch(() => null);
-              setCloudSyncMessage(syncError?.message || `Sinkronisasi gagal (HTTP ${syncRes.status}).`);
-              setCloudSyncStatus('error');
+              // Pull cloud data
+              const syncRes = await fetch(`${base}/api/sync`, { credentials: 'include' });
+              if (syncRes.ok) {
+                const syncData = await syncRes.json();
+                if (syncData.hasData && syncData.data) {
+                  const cloudAccs = syncData.data.accounts || DEFAULT_ACCOUNTS;
+                  const cloudCats = syncData.data.categories || DEFAULT_CATEGORIES;
+                  const cloudTxs = syncData.data.transactions || [];
+
+                  setAccounts(cloudAccs);
+                  setCategories(cloudCats);
+                  setTransactions(cloudTxs);
+
+                  localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(cloudAccs));
+                  localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(cloudCats));
+                  localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(cloudTxs));
+
+                  setCloudSyncStatus('synced');
+                  setCloudSyncMessage(null);
+                  setLastSyncedAt(syncData.data.updatedAt);
+                } else if (!syncData.hasData) {
+                  // Initial backup of existing local data to cloud
+                  const currentAccs = getInitialState(STORAGE_KEYS.ACCOUNTS, DEFAULT_ACCOUNTS);
+                  const currentCats = getInitialState(STORAGE_KEYS.CATEGORIES, DEFAULT_CATEGORIES);
+                  const currentTxs = getInitialState(STORAGE_KEYS.TRANSACTIONS, generateSeedTransactions());
+                  pushToCloud(currentAccs, currentCats, currentTxs);
+                }
+              } else {
+                const syncError = await syncRes.json().catch(() => null);
+                setCloudSyncMessage(syncError?.message || `Sinkronisasi gagal (HTTP ${syncRes.status}).`);
+                setCloudSyncStatus('error');
+              }
             }
           }
           if (meRes.ok && !meData.user && isMounted) {
@@ -380,9 +463,45 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     };
   }, [pushToCloud]);
 
+  // Auto-upload saat koneksi internet kembali atau app dibuka kembali
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const flushPendingSync = () => {
+      if (!isCloudActive) return;
+      if (!hasPendingSync) return;
+      if (!navigator.onLine) return;
+      pushToCloud(accounts, categories, transactions);
+    };
+
+    const handleOffline = () => {
+      if (isCloudActive) {
+        setCloudSyncStatus('offline');
+        setCloudSyncMessage('Sedang offline. Perubahan akan otomatis dikirim saat online.');
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        flushPendingSync();
+      }
+    };
+
+    window.addEventListener('online', flushPendingSync);
+    window.addEventListener('offline', handleOffline);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('online', flushPendingSync);
+      window.removeEventListener('offline', handleOffline);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isCloudActive, hasPendingSync, accounts, categories, transactions, pushToCloud]);
+
   const logoutFromCloud = useCallback(async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      const base = getApiBaseUrl();
+      await fetch(`${base}/api/auth/logout`, { method: 'POST', credentials: 'include' });
     } catch {
       // ignore
     }
@@ -650,6 +769,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         cloudSyncMessage,
         lastSyncedAt,
         isCloudActive,
+        hasPendingSync,
+        serverUrl,
+        setServerUrl,
         syncToCloud,
         syncFromCloud,
         logoutFromCloud,

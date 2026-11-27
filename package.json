@@ -5,11 +5,14 @@
   "scripts": {
     "dev": "next dev -p 3100",
     "build": "next build && node scripts/prepare-standalone.cjs",
+    "build:mobile": "node scripts/build-mobile.cjs",
     "start": "node scripts/start-production.cjs",
     "lint": "eslint",
     "test": "vitest run"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.3",
+    "@capacitor/core": "^8.6.3",
     "canvas-confetti": "^1.9.4",
     "html-to-image": "^1.11.13",
     "lucide-react": "^1.41.0",
@@ -18,6 +21,7 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.3",
     "@tailwindcss/postcss": "^4",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20",
